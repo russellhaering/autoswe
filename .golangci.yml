@@ -1,0 +1,22 @@
+run:
+  go: '1.24'
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - unused
+    - revive  # modern replacement for golint
+    - gocyclo
+    - misspell
+    - typecheck
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15 
