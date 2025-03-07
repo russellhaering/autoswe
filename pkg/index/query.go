@@ -227,6 +227,11 @@ func (i *Indexer) collectSnippets(results []db.SearchResult) ([]CodeExample, err
 			continue
 		}
 
+		// Initialize inner map if it doesn't exist
+		if fileRanges[namespace] == nil {
+			fileRanges[namespace] = make(map[string][]snippetRange)
+		}
+
 		fileRanges[namespace][path] = append(fileRanges[namespace][path], snippetRange{
 			startLine: startLine,
 			endLine:   endLine,

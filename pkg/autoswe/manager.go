@@ -2,6 +2,7 @@ package autoswe
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
@@ -40,6 +41,19 @@ func ProvideGemini(ctx context.Context, geminiAPIKey GeminiAPIKey) (*genai.Clien
 func ProvideAnthropic(ctx context.Context, anthropicAPIKey AnthropicAPIKey) *anthropic.Client {
 	return anthropic.NewClient(
 		anthropicoption.WithAPIKey(string(anthropicAPIKey)),
+		anthropicoption.WithMiddleware(func(req *http.Request, next anthropicoption.MiddlewareNext) (*http.Response, error) {
+			resp, err := next(req)
+			if err != nil {
+				log.Error("error calling anthropic", zap.Error(err))
+				return nil, err
+			}
+
+			if resp.StatusCode == 429 {
+				log.Debug("rate-limited by anthropic", zap.Int("status", resp.StatusCode))
+			}
+
+			return resp, nil
+		}),
 
 		// We need lots of retries to deal with rate limits - we certainly don't want to give up
 		anthropicoption.WithMaxRetries(20),

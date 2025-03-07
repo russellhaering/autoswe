@@ -2,11 +2,13 @@ package repo
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/russellhaering/auto-swe/pkg/log"
 	ignore "github.com/sabhiram/go-gitignore"
@@ -102,6 +104,40 @@ type filteredFS struct {
 
 func (f *filteredFS) isFilteredFS() {}
 
+// isValidUTF8File checks whether the first 512 bytes of a file are valid UTF-8
+func (f *filteredFS) isBinaryFile(path string) bool {
+	file, err := f.ReadDirFS.Open(path)
+	if err != nil {
+		return false
+	}
+
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+
+	if info.IsDir() {
+		return false
+	}
+
+	// Read up to 512 bytes
+	buf := make([]byte, 512)
+	n, err := file.Read(buf)
+	if err != nil && err != io.EOF {
+		return false
+	}
+
+	// An empty file is valid UTF-8
+	if n == 0 {
+		return true
+	}
+
+	// Check if the bytes are valid UTF-8
+	return !utf8.Valid(buf[:n])
+}
+
 func (f *filteredFS) Open(name string) (fs.File, error) {
 	// Check if the file should be ignored
 	if f.shouldIgnore(name) {
@@ -138,18 +174,28 @@ func (f *filteredFS) ReadDir(name string) ([]fs.DirEntry, error) {
 
 // shouldIgnore checks if the given path should be ignored
 func (f *filteredFS) shouldIgnore(path string) bool {
-	return f.gitignore.MatchesPath(path)
+	if f.gitignore.MatchesPath(path) {
+		return true
+	}
+
+	if f.isBinaryFile(path) {
+		return true
+	}
+
+	return false
 }
 
 // WalkDir walks the file tree rooted at root, calling fn for each file or
 // directory in the tree, including root, but filtering out ignored files and directories
+// as well as files with invalid UTF-8 content
 func (f *filteredFS) WalkDir(root string, fn fs.WalkDirFunc) error {
 	return fs.WalkDir(f, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fn(path, d, err)
 		}
 
-		// We already filter in ReadDir, but double-check here
+		// We already filter in Open and ReadDir, but we'll double-check here
+		// to be completely consistent
 		if f.shouldIgnore(path) {
 			if d.IsDir() {
 				return fs.SkipDir

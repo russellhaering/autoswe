@@ -73,6 +73,76 @@ func TestFilteredFS_Filter(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestFilteredFS_UTF8Validation tests the filtering of files with invalid UTF-8
+func TestFilteredFS_UTF8Validation(t *testing.T) {
+	// Create some test files
+	tmpDir := t.TempDir()
+
+	// Create a valid UTF-8 text file
+	validPath := filepath.Join(tmpDir, "valid-utf8.txt")
+	mustCreateFile(t, validPath, "This is valid UTF-8 text")
+
+	// Create a file with valid UTF-8 at the beginning but invalid later (should pass)
+	validPrefixPath := filepath.Join(tmpDir, "valid-prefix.bin")
+	validPrefix := "Valid UTF-8 prefix: "
+	content := make([]byte, len(validPrefix)+10)
+	copy(content, validPrefix)
+	// Add some invalid UTF-8 bytes at the end
+	content[len(validPrefix)] = 0xFF
+	content[len(validPrefix)+1] = 0xFF
+	err := os.WriteFile(validPrefixPath, content, 0644)
+	assert.NoError(t, err)
+
+	// Create a file with invalid UTF-8 at the beginning (should be filtered)
+	invalidPath := filepath.Join(tmpDir, "invalid-utf8.bin")
+	invalidContent := make([]byte, 10)
+	invalidContent[0] = 0xFF
+	invalidContent[1] = 0xFF
+	err = os.WriteFile(invalidPath, invalidContent, 0644)
+	assert.NoError(t, err)
+
+	// Create a RepoFS instance
+	repoFS := NewRepoFS(tmpDir)
+
+	// Create a filtered FS
+	filteredFS, err := repoFS.Filter()
+	assert.NoError(t, err)
+
+	// Test valid UTF-8 file
+	file, err := filteredFS.Open("valid-utf8.txt")
+	assert.NoError(t, err)
+	if err == nil {
+		file.Close()
+	}
+
+	// Test file with valid UTF-8 prefix
+	file, err = filteredFS.Open("valid-prefix.bin")
+	assert.NoError(t, err)
+	if err == nil {
+		file.Close()
+	}
+
+	// Test file with invalid UTF-8 at the beginning (should be filtered)
+	_, err = filteredFS.Open("invalid-utf8.bin")
+	assert.Error(t, err)
+
+	// Test directory walking
+	var visitedPaths []string
+	err = fs.WalkDir(filteredFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		visitedPaths = append(visitedPaths, path)
+		return nil
+	})
+	assert.NoError(t, err)
+
+	// The invalid UTF-8 file should not be in the visited paths
+	for _, path := range visitedPaths {
+		assert.NotEqual(t, "invalid-utf8.bin", path, "Invalid UTF-8 file should not be visited")
+	}
+}
+
 // TestFilteredFS_Open tests opening files with the filtered file system
 func TestFilteredFS_Open(t *testing.T) {
 	// Create some test files
