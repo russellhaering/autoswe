@@ -1,5 +1,7 @@
 # auto-swe
 
+**YOLO Mode On**
+
 `auto-swe` is an experimental, autonomous, CLI-driven AI agent that writes software. Currently it is specifically focused on Go, but in the future it may be extended to support additional languages.
 
 `auto-swe` mostly consists of a collection of tools for exploring and modifying a codebase - think of it as an IDE for AI. Given a task description, `auto-swe` invokes an LLM (currently only Claude is supported) with access to these tools a basic system prompt, and leaves the rest to the LLM.
