@@ -49,7 +49,7 @@ func TestFilteredFS_Filter(t *testing.T) {
 
 	// Create an ignore file
 	ignoreContent := "*.exe\n*.png\nnode_modules\n"
-	mustCreateFile(t, filepath.Join(tmpDir, ".auto-swe-ignore"), ignoreContent)
+	mustCreateFile(t, filepath.Join(tmpDir, ".autosweignore"), ignoreContent)
 
 	// Create a RepoFS instance
 	repoFS := NewRepoFS(tmpDir)
@@ -161,7 +161,7 @@ func TestFilteredFS_Open(t *testing.T) {
 
 	// Create an ignore file
 	ignoreContent := "*.exe\n*.png\nnode_modules\n"
-	mustCreateFile(t, filepath.Join(tmpDir, ".auto-swe-ignore"), ignoreContent)
+	mustCreateFile(t, filepath.Join(tmpDir, ".autosweignore"), ignoreContent)
 
 	// Create a RepoFS instance
 	repoFS := NewRepoFS(tmpDir)
@@ -223,7 +223,7 @@ func TestFilteredFS_ReadDir(t *testing.T) {
 
 	// Create an ignore file
 	ignoreContent := "*.exe\n*.png\nnode_modules\n"
-	mustCreateFile(t, filepath.Join(tmpDir, ".auto-swe-ignore"), ignoreContent)
+	mustCreateFile(t, filepath.Join(tmpDir, ".autosweignore"), ignoreContent)
 
 	// Create a RepoFS instance
 	repoFS := NewRepoFS(tmpDir)
@@ -238,10 +238,10 @@ func TestFilteredFS_ReadDir(t *testing.T) {
 
 	// We should only see the non-ignored files and directories
 	expectedNames := map[string]bool{
-		"file.txt":         true,
-		"file.go":          true,
-		".auto-swe-ignore": true,
-		"src":              true,
+		"file.txt":       true,
+		"file.go":        true,
+		".autosweignore": true,
+		"src":            true,
 	}
 
 	assert.Equal(t, len(expectedNames), len(entries))
@@ -295,7 +295,7 @@ func TestFilteredFS_WalkDir(t *testing.T) {
 
 	// Create an ignore file
 	ignoreContent := "*.exe\n*.png\nnode_modules\n"
-	mustCreateFile(t, filepath.Join(tmpDir, ".auto-swe-ignore"), ignoreContent)
+	mustCreateFile(t, filepath.Join(tmpDir, ".autosweignore"), ignoreContent)
 
 	// Create a RepoFS instance
 	repoFS := NewRepoFS(tmpDir)
@@ -320,7 +320,7 @@ func TestFilteredFS_WalkDir(t *testing.T) {
 		".",
 		"file.txt",
 		"file.go",
-		".auto-swe-ignore",
+		".autosweignore",
 		"src",
 		"src/main.go",
 		"src/util.go",

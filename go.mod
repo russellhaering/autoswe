@@ -1,4 +1,4 @@
-module github.com/russellhaering/auto-swe
+module github.com/russellhaering/autoswe
 
 go 1.23.0
 
@@ -7,6 +7,7 @@ toolchain go1.24.0
 require (
 	github.com/anthropics/anthropic-sdk-go v0.2.0-alpha.11
 	github.com/google/generative-ai-go v0.19.0
+	github.com/google/wire v0.6.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/spf13/cobra v1.9.1
@@ -31,9 +32,7 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/subcommands v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/google/wire v0.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

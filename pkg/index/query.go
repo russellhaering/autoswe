@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
-	"github.com/russellhaering/auto-swe/pkg/db"
-	"github.com/russellhaering/auto-swe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/db"
+	"github.com/russellhaering/autoswe/pkg/log"
 	"go.uber.org/zap"
 )
 

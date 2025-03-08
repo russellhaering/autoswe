@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/russellhaering/auto-swe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/log"
 	ignore "github.com/sabhiram/go-gitignore"
 	"go.uber.org/zap"
 )
@@ -18,7 +18,7 @@ import (
 var (
 	SkipDirs = []string{
 		".git",
-		".auto-swe",
+		".autoswe",
 		"vendor",
 		"node_modules",
 		".idea",
@@ -60,9 +60,9 @@ func (r *RepoFS) Path() string {
 }
 
 func (r *RepoFS) Filter() (FilteredFS, error) {
-	bytes, err := fs.ReadFile(r, ".auto-swe-ignore")
+	bytes, err := fs.ReadFile(r, ".autosweignore")
 	if err != nil {
-		log.Debug("No .auto-swe-ignore file found, using default ignore rules")
+		log.Debug("No .autosweignore file found, using default ignore rules")
 	}
 
 	lines := strings.Split(string(bytes), "\n")

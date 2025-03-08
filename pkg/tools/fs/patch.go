@@ -10,9 +10,9 @@ import (
 	"github.com/google/generative-ai-go/genai"
 	"github.com/google/wire"
 	"github.com/invopop/jsonschema"
-	"github.com/russellhaering/auto-swe/pkg/log"
-	"github.com/russellhaering/auto-swe/pkg/repo"
-	"github.com/russellhaering/auto-swe/pkg/tools/fs/simplediff"
+	"github.com/russellhaering/autoswe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/repo"
+	"github.com/russellhaering/autoswe/pkg/tools/fs/simplediff"
 	"go.uber.org/zap"
 )
 

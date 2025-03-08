@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/russellhaering/auto-swe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/log"
 )
 
 // ListInput represents the input parameters for the List tool

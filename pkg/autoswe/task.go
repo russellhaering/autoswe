@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
-	"github.com/russellhaering/auto-swe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/log"
 	"go.uber.org/zap"
 )
 

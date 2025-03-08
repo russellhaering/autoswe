@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/wire"
 	"github.com/invopop/jsonschema"
-	"github.com/russellhaering/auto-swe/pkg/log"
-	"github.com/russellhaering/auto-swe/pkg/repo"
+	"github.com/russellhaering/autoswe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
 )
 

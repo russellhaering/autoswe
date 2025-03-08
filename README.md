@@ -1,10 +1,10 @@
-# auto-swe
+# autoswe
 
-**YOLO Mode On**
+**YOLO Mode: MAXIMUM**
 
-`auto-swe` is an experimental, autonomous, CLI-driven AI agent that writes software. Currently it is specifically focused on Go, but in the future it may be extended to support additional languages.
+`autoswe` is an experimental, autonomous, CLI-driven AI agent that writes software. Currently it is specifically focused on Go, but in the future it may be extended to support additional languages.
 
-`auto-swe` mostly consists of a collection of tools for exploring and modifying a codebase - think of it as an IDE for AI. Given a task description, `auto-swe` invokes an LLM (currently only Claude is supported) with access to these tools a basic system prompt, and leaves the rest to the LLM.
+`autoswe` mostly consists of a collection of tools for exploring and modifying a codebase - think of it as an IDE for AI. Given a task description, `autoswe` invokes an LLM (currently only Claude is supported) with access to these tools a basic system prompt, and leaves the rest to the LLM.
 
 ## Configuration
 
@@ -13,7 +13,7 @@ You'll need to set up *both* of the following API keys:
 - `ANTHROPIC_API_KEY` - for Claude AI (or use --anthropic-key flag)
 - `GOOGLE_API_KEY` - used for Gemini AI (or use --gemini-key flag)
 
-`auto-swe` uses both Gemini and Claude for various purposes:
+`autoswe` uses both Gemini and Claude for various purposes:
 
 * `gemini-2.0-flash-lite` is used for indexing and search due to  its low cost and large context window
 * `claude-3-7-sonnet-latest` is used for the bulk of the work, including task orchestration, tool usage, and the generation of commit messages and other artifacts
@@ -25,18 +25,18 @@ You'll need to set up *both* of the following API keys:
 
 ```bash
 # Run an AI-assisted task
-auto-swe task "add error handling to the database connection"
+autoswe task "add error handling to the database connection"
 
 # Ask a question about the codebase
-auto-swe task "How are tools registered?"
+autoswe task "How are tools registered?"
 
 # Commit current changes with an AI-generated commit message
-auto-swe commit
+autoswe commit
 ```
 
 ## Tools
 
-The following is a non-exhaustive list of the tools that `auto-swe` has access to.
+The following is a non-exhaustive list of the tools that `autoswe` has access to.
 
 ### Code Quality & Validation
 
@@ -66,9 +66,9 @@ The following is a non-exhaustive list of the tools that `auto-swe` has access t
 
 ## Semantic Search
 
-In order to allow the LLM to efficiently understand the codebase, `auto-swe` builds a semantic search index of the codebase.
+In order to allow the LLM to efficiently understand the codebase, `autoswe` builds a semantic search index of the codebase.
 
-Every time an `auto-swe` command is run, it will walk the full codebase in the current working directory, and for any file that has changed since the last update to the index it will "re-index" that file.
+Every time an `autoswe` command is run, it will walk the full codebase in the current working directory, and for any file that has changed since the last update to the index it will "re-index" that file.
 
 Indexing a file is a two-step process:
 
@@ -80,4 +80,4 @@ When a natural language query is made, the following process occurs:
 1. A vector search is made against the index to find the most relevant files and snippets. When a high density of relevant snippets are found in a single file or section, the entire file or section is considered a match.
 2. Every matching snippet, section or file is sent to `gemini-2.0-flash-lite` with a prompt that asks it to filter out verbatim results relevant to the query.
 
-Running `auto-swe context "some query"` allows you to see the raw results of a semantic search, but in normal operation these searches are invoked automatically by the LLM when it needs to answer a question about the codebase, and the results help to populate the LLM's context window.
+Running `autoswe context "some query"` allows you to see the raw results of a semantic search, but in normal operation these searches are invoked automatically by the LLM when it needs to answer a question about the codebase, and the results help to populate the LLM's context window.

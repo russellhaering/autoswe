@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/russellhaering/auto-swe/pkg/log"
-	"github.com/russellhaering/auto-swe/pkg/tools/fs/simplediff"
+	"github.com/russellhaering/autoswe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/tools/fs/simplediff"
 )
 
 // Create a mock version of the PatchTool that doesn't use Gemini

@@ -12,14 +12,14 @@ import (
 	"time"
 
 	"github.com/google/generative-ai-go/genai"
-	"github.com/russellhaering/auto-swe/pkg/db"
-	"github.com/russellhaering/auto-swe/pkg/log"
-	"github.com/russellhaering/auto-swe/pkg/repo"
+	"github.com/russellhaering/autoswe/pkg/db"
+	"github.com/russellhaering/autoswe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
 )
 
 const (
-	StoragePath = ".auto-swe"
+	StoragePath = ".autoswe"
 	DBFileName  = "db"
 
 	RepoNamespace         = "repo"

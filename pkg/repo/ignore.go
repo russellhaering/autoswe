@@ -19,7 +19,7 @@ type Config struct {
 var DefaultConfig = Config{
 	SkipDirs: []string{
 		".git",
-		".auto-swe",
+		".autoswe",
 		"vendor",
 		"node_modules",
 		".idea",
