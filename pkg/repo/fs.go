@@ -104,8 +104,8 @@ type filteredFS struct {
 
 func (f *filteredFS) isFilteredFS() {}
 
-// isValidUTF8File checks whether the first 512 bytes of a file are valid UTF-8
-func (f *filteredFS) isBinaryFile(path string) bool {
+// isLargeOrBinaryFile checks if the file is large (>128KB) or binary.
+func (f *filteredFS) isLargeOrBinaryFile(path string) bool {
 	file, err := f.ReadDirFS.Open(path)
 	if err != nil {
 		return false
@@ -120,6 +120,10 @@ func (f *filteredFS) isBinaryFile(path string) bool {
 
 	if info.IsDir() {
 		return false
+	}
+
+	if info.Size() > 128*1024 {
+		return true
 	}
 
 	// Read up to 512 bytes
@@ -178,7 +182,7 @@ func (f *filteredFS) shouldIgnore(path string) bool {
 		return true
 	}
 
-	if f.isBinaryFile(path) {
+	if f.isLargeOrBinaryFile(path) {
 		return true
 	}
 
