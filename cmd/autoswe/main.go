@@ -69,8 +69,10 @@ func main() {
 	}
 
 	// Clean up clients
-	if err := manager.Close(); err != nil {
-		log.Warn("error closing manager", zap.Error(err))
+	if manager != nil {
+		if err := manager.Close(); err != nil {
+			log.Warn("error closing manager", zap.Error(err))
+		}
 	}
 }
 

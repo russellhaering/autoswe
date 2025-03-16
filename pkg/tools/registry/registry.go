@@ -128,19 +128,33 @@ func RegisterTool[I, O any](registry *ToolRegistry, tool Tool[I, O]) {
 	}
 }
 
-func (r *ToolRegistry) getToolsByName() map[string]interface{} {
+func (r *ToolRegistry) getTool(name string) (*toolWrapper, bool) {
+	registration, ok := r.tools[name]
+	if !ok {
+		return nil, false
+	}
+
+	return &toolWrapper{
+		name:        registration.name,
+		description: registration.description,
+		schema:      registration.schema,
+		execute:     registration.execute,
+	}, true
+}
+
+func (r *ToolRegistry) getToolsByName() map[string]*toolWrapper {
 	// Create a map of tool names to tool interfaces
-	toolsByName := make(map[string]interface{})
+	toolsByName := make(map[string]*toolWrapper)
 
 	// Copy from our tools map to the result map
-	for name, registration := range r.tools {
+	for name := range r.tools {
 		// Create a toolWrapper that satisfies the Tool interface requirements
-		toolsByName[name] = &toolWrapper{
-			name:        registration.name,
-			description: registration.description,
-			schema:      registration.schema,
-			execute:     registration.execute,
+		wrapper, ok := r.getTool(name)
+		if !ok {
+			panic(fmt.Sprintf("tool %s not found", name))
 		}
+
+		toolsByName[name] = wrapper
 	}
 
 	return toolsByName
@@ -180,115 +194,71 @@ func (r *ToolRegistry) GetToolParams() []anthropic.ToolUnionUnionParam {
 
 	result := []anthropic.ToolUnionUnionParam{}
 
-	for _, tool := range toolsByName {
-		wrapper, ok := tool.(*toolWrapper)
-		if !ok {
-			continue
-		}
-
-		// Get the schema from the tool
+	for _, wrapper := range toolsByName {
+		// Get the schema from the tool, then extract the actual definition
 		schema := wrapper.Schema()
 
-		// Ensure schema has required fields for Anthropic API
-		schemaMap := make(map[string]interface{})
-
-		// Convert the schema to a map
-		schemaBytes, err := json.Marshal(schema)
-		if err != nil {
-			log.Error("failed to marshal schema", zap.Error(err))
-			continue
+		if len(schema.Definitions) != 1 {
+			panic(fmt.Sprintf("tool %s has %d definitions, expected 1", wrapper.Name(), len(schema.Definitions)))
 		}
 
-		if err := json.Unmarshal(schemaBytes, &schemaMap); err != nil {
-			log.Error("failed to unmarshal schema", zap.Error(err))
-			continue
-		}
-
-		// Ensure the schema has a type field (required by Anthropic)
-		if _, ok := schemaMap["type"]; !ok {
-			schemaMap["type"] = "object"
+		for _, v := range schema.Definitions {
+			schema = v
 		}
 
 		result = append(result, anthropic.ToolParam{
 			Name:        anthropic.F(wrapper.Name()),
 			Description: anthropic.F(wrapper.Description()),
-			InputSchema: anthropic.F(interface{}(schemaMap)),
+			InputSchema: anthropic.F(interface{}(schema)),
 		})
 	}
 
 	return result
 }
 
-// ProcessToolCalls handles a sequence of tool calls and returns the results
-func (r *ToolRegistry) ProcessToolCalls(ctx context.Context, message *anthropic.Message) ([]anthropic.ContentBlockParamUnion, error) {
-	toolsByName := r.getToolsByName()
+type ToolCall struct {
+	Name  string
+	ID    string
+	Input json.RawMessage
+}
 
-	results := []anthropic.ContentBlockParamUnion{}
-
-	for _, block := range message.Content {
-		if toolUse, ok := block.AsUnion().(anthropic.ToolUseBlock); ok {
-			// Get the tool
-			toolInterface, ok := toolsByName[toolUse.Name]
-			if !ok {
-				log.Error("unknown tool",
-					zap.String("tool", toolUse.Name),
-					zap.String("id", toolUse.ID),
-				)
-
-				return nil, fmt.Errorf("unknown tool: %s", toolUse.Name)
-			}
-
-			tool, ok := toolInterface.(*toolWrapper)
-			if !ok {
-				return nil, fmt.Errorf("invalid tool type: %s", toolUse.Name)
-			}
-
-			var input interface{}
-			if err := json.Unmarshal(toolUse.Input, &input); err != nil {
-				log.Error("failed to decode tool input for logging",
-					zap.String("tool", toolUse.Name),
-					zap.String("id", toolUse.ID),
-					zap.String("input", string(toolUse.Input)),
-					zap.Error(err),
-				)
-
-				return nil, fmt.Errorf("failed to decode tool input for logging: %w", err)
-			}
-
-			log.Debug("handling tool call",
-				zap.String("tool", toolUse.Name),
-				zap.String("id", toolUse.ID),
-				zap.Any("input", input),
-			)
-
-			// Execute the tool
-			response, err := tool.Execute(ctx, input)
-			if err != nil {
-				log.Error("error from tool call",
-					zap.String("tool", toolUse.Name),
-					zap.String("id", toolUse.ID),
-					zap.Any("input", input),
-					zap.Any("output", response),
-					zap.Error(err),
-				)
-
-				results = append(results, anthropic.NewToolResultBlock(toolUse.ID, "Error: "+err.Error(), true))
-			} else {
-				responseJSON, err := json.Marshal(response)
-				if err != nil {
-					return nil, fmt.Errorf("failed to marshal response: %w", err)
-				}
-
-				log.Debug("tool call response",
-					zap.String("tool", toolUse.Name),
-					zap.String("id", toolUse.ID),
-					zap.Any("response", response),
-				)
-
-				results = append(results, anthropic.NewToolResultBlock(toolUse.ID, string(responseJSON), false))
-			}
-		}
+// ExecuteToolCall handles a single tool call and returns the result
+func (r *ToolRegistry) ExecuteToolCall(ctx context.Context, call ToolCall) (string, error) {
+	tool, ok := r.getTool(call.Name)
+	if !ok {
+		return "", fmt.Errorf("unknown tool: %s", call.Name)
 	}
 
-	return results, nil
+	var input interface{}
+	if err := json.Unmarshal(call.Input, &input); err != nil {
+		log.Error("failed to decode tool input for logging",
+			zap.String("tool", tool.Name()),
+			zap.String("id", call.ID),
+			zap.String("input", string(call.Input)),
+			zap.Error(err),
+		)
+
+		return "", fmt.Errorf("failed to decode tool input for logging: %w", err)
+	}
+
+	// Execute the tool
+	response, err := tool.Execute(ctx, input)
+	if err != nil {
+		log.Error("error from tool call",
+			zap.String("tool", tool.Name()),
+			zap.String("id", call.ID),
+			zap.Any("input", input),
+			zap.Any("output", response),
+			zap.Error(err),
+		)
+
+		return "", err
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return string(responseJSON), nil
 }
