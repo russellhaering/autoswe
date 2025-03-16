@@ -97,7 +97,6 @@ func ProvideToolRegistry(
 	RegisterTool(registry, formatTool)
 	RegisterTool(registry, gitCommandTool)
 	RegisterTool(registry, gitCommitTool)
-	RegisterTool(registry, goplsTool)
 	RegisterTool(registry, lintTool)
 	RegisterTool(registry, testTool)
 	RegisterTool(registry, queryTool)
