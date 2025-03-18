@@ -31,7 +31,7 @@ type GrepMatch struct {
 
 // GrepOutput represents the results of the grep operation
 type GrepOutput struct {
-	Matches []GrepMatch `json:"matches,omitempty"`
+	Result string `json:"result"`
 }
 
 type GrepTool struct {
@@ -52,6 +52,7 @@ func (t *GrepTool) Description() string {
 
 // Schema returns the JSON schema for the grep tool
 func (t *GrepTool) Schema() *jsonschema.Schema {
+	// Only reflect the input schema - the output is still a JSON object but with a simplified string result
 	return jsonschema.Reflect(&GrepInput{})
 }
 
@@ -148,7 +149,38 @@ func (t *GrepTool) Execute(ctx context.Context, input GrepInput) (GrepOutput, er
 	}
 
 	log.Info("Grep operation completed", zap.Int("matches", len(matches)))
+
+	// Format the matches as a string
+	var sb strings.Builder
+
+	if len(matches) == 0 {
+		sb.WriteString("No matches found for pattern: " + input.Pattern)
+	} else {
+		sb.WriteString(fmt.Sprintf("Found %d matches for pattern: %s\n\n", len(matches), input.Pattern))
+
+		for _, match := range matches {
+			sb.WriteString(fmt.Sprintf("%s:%d\n", match.File, match.Line))
+
+			// Add before context with line numbers
+			for i, line := range match.Before {
+				lineNum := match.Line - len(match.Before) + i
+				sb.WriteString(fmt.Sprintf("  %d: %s\n", lineNum, line))
+			}
+
+			// Add the matched line (highlighted)
+			sb.WriteString(fmt.Sprintf("> %d: %s\n", match.Line, match.Content))
+
+			// Add after context with line numbers
+			for i, line := range match.After {
+				lineNum := match.Line + i + 1
+				sb.WriteString(fmt.Sprintf("  %d: %s\n", lineNum, line))
+			}
+
+			sb.WriteString("\n")
+		}
+	}
+
 	return GrepOutput{
-		Matches: matches,
+		Result: sb.String(),
 	}, nil
 }
