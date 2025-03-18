@@ -6,25 +6,10 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/russellhaering/autoswe/pkg/log"
+	"github.com/russellhaering/autoswe/pkg/prompts"
 	"github.com/russellhaering/autoswe/pkg/tools/registry"
 	"go.uber.org/zap"
 )
-
-const BaseSystemPrompt = `You are an expert software engineer. You will be given tasks to complete, and you will need to complete them using the tools available to you.
-
-Best practices for task handling:
-- Break down complex problems into focused subtasks when needed
-- For each subtask, invoke the 'task' tool with a clear, specific description
-- Be sure to lint, test, and format your code as needed
-- Complete the current task by responding with text and no tool invocation
-- If you need to make a large number of small modifications to a file, use fs_put to write the entire file at once
-- Explain your reasoning as you go, and only modify files once you have a clear plan of action
-- Don't make changes unrelated to the task at hand
-- Do not add tools or scripts to the codebase unless you are asked to do so
-
-Be sure to use the tools at your disposal to examine the existing codebase to discover and emulate existing patterns.
-
-Remember to think creatively about how to accomplish each task using the tools at your disposal. You are always encouraged to walk through your reasoning.`
 
 // Task represents a single task with its conversation context
 type Task struct {
@@ -39,14 +24,8 @@ func (t *Task) Clone() []anthropic.MessageParam {
 	return messages
 }
 
-// Result represents the result of processing a task
-type Result struct {
-	Response string
-	Error    error
-}
-
 func (m *Manager) ExecuteTask(ctx context.Context, description string) (string, error) {
-	task := NewTask(description, BaseSystemPrompt)
+	task := NewTask(description, prompts.System)
 	return m.processTask(ctx, task)
 }
 
@@ -82,10 +61,15 @@ func (m *Manager) processTask(ctx context.Context, task *Task) (string, error) {
 				zap.Float64("total_cost_usd", totalCost))
 		}
 
+		if len(message.Content) == 0 {
+			log.Warn("Received empty assistant response", zap.Any("message", message))
+			continue
+		}
+
 		log.Debug("Received assistant response")
 
 		task.Messages = append(task.Messages, message.ToParam())
-		initialMessageCount := len(message.Content)
+		initialMessageCount := len(task.Messages)
 
 		for _, block := range message.Content {
 			switch block := block.AsUnion().(type) {
@@ -98,6 +82,8 @@ func (m *Manager) processTask(ctx context.Context, task *Task) (string, error) {
 				}
 
 				task.Messages = append(task.Messages, *responseMessage)
+			default:
+				log.Warn("Received unexpected block type", zap.Any("block", block))
 			}
 		}
 
@@ -168,7 +154,6 @@ func NewTask(description string, systemPrompt string) *Task {
 	return &Task{
 		Description: description,
 		Messages: []anthropic.MessageParam{
-			// TODO: make the system prompt actually be the system prompt
 			anthropic.NewUserMessage(anthropic.NewTextBlock(systemPrompt)),
 			anthropic.NewUserMessage(anthropic.NewTextBlock(description)),
 		},

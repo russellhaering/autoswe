@@ -19,12 +19,12 @@ const (
 
 // Input represents the input for the Exec tool
 type Input struct {
-	Command []string `json:"command"`
+	Command []string `json:"command" jsonschema_description:"The command to execute."`
 }
 
 // Output represents the output of the Exec tool
 type Output struct {
-	Output string `json:"output"`
+	Output string `json:"output" description:"The output of the command"`
 }
 
 // ExecTool implements the Exec tool
@@ -39,7 +39,7 @@ func (t *ExecTool) Name() string {
 
 // Description returns a description of the exec tool
 func (t *ExecTool) Description() string {
-	return fmt.Sprintf("Executes a CLI command with the project as the working directory. Commands are executed in a container running the '%s' Docker image.", DockerImage)
+	return fmt.Sprintf("Executes a shell command with the project as the working directory. Commands are executed in a container running the '%s' Docker image with a bash shell.", DockerImage)
 }
 
 // Schema returns the JSON schema for the exec tool

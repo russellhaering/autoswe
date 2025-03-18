@@ -16,7 +16,6 @@ import (
 	"github.com/russellhaering/autoswe/pkg/tools/format"
 	"github.com/russellhaering/autoswe/pkg/tools/fs"
 	"github.com/russellhaering/autoswe/pkg/tools/git"
-	"github.com/russellhaering/autoswe/pkg/tools/gopls"
 	"github.com/russellhaering/autoswe/pkg/tools/lint"
 	"github.com/russellhaering/autoswe/pkg/tools/query"
 	"github.com/russellhaering/autoswe/pkg/tools/test"
@@ -33,7 +32,6 @@ var ToolSet = wire.NewSet(
 	format.ProvideFormatTool,
 	git.ProvideCommandTool,
 	git.ProvideCommitTool,
-	gopls.ProvideGoplsTool,
 	lint.ProvideLintTool,
 	test.ProvideTestTool,
 	query.ProvideQueryTool,
@@ -74,7 +72,6 @@ func ProvideToolRegistry(
 	formatTool *format.FormatTool,
 	gitCommandTool *git.CommandTool,
 	gitCommitTool *git.CommitTool,
-	goplsTool *gopls.GoplsTool,
 	lintTool *lint.LintTool,
 	testTool *test.TestTool,
 	queryTool *query.QueryTool,

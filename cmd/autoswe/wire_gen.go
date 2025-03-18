@@ -16,7 +16,6 @@ import (
 	"github.com/russellhaering/autoswe/pkg/tools/format"
 	"github.com/russellhaering/autoswe/pkg/tools/fs"
 	"github.com/russellhaering/autoswe/pkg/tools/git"
-	"github.com/russellhaering/autoswe/pkg/tools/gopls"
 	"github.com/russellhaering/autoswe/pkg/tools/lint"
 	"github.com/russellhaering/autoswe/pkg/tools/query"
 	"github.com/russellhaering/autoswe/pkg/tools/registry"
@@ -57,7 +56,6 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	commitTool := &git.CommitTool{
 		RepoFS: repoFS,
 	}
-	goplsTool := &gopls.GoplsTool{}
 	lintTool := &lint.LintTool{}
 	testTool := &test.TestTool{}
 	queryTool := &query.QueryTool{
@@ -82,7 +80,7 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	rmTool := &fs.RmTool{
 		FilteredFS: filteredFS,
 	}
-	toolRegistry := registry.ProvideToolRegistry(astGrepTool, buildTool, fetchTool, listTool, execTool, formatTool, commandTool, commitTool, goplsTool, lintTool, testTool, queryTool, fsFetchTool, grepTool, fsListTool, patchTool, putTool, rmTool)
+	toolRegistry := registry.ProvideToolRegistry(astGrepTool, buildTool, fetchTool, listTool, execTool, formatTool, commandTool, commitTool, lintTool, testTool, queryTool, fsFetchTool, grepTool, fsListTool, patchTool, putTool, rmTool)
 	autosweManager := autoswe.Manager{
 		GeminiClient:    client,
 		AnthropicClient: anthropicClient,
