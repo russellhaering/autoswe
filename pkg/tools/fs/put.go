@@ -9,7 +9,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed put.md
+var putToolDescription string
 
 // PutInput represents the input parameters for the Put tool
 type PutInput struct {
@@ -33,7 +38,7 @@ func (t *PutTool) Name() string {
 
 // Description returns a description of the put tool
 func (t *PutTool) Description() string {
-	return "Writes content to a file at the specified path"
+	return putToolDescription
 }
 
 // Schema returns the JSON schema for the put tool

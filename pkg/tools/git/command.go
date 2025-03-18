@@ -9,7 +9,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed command.md
+var commandToolDescription string
 
 // CommandInput represents the input parameters for the Command tool
 type CommandInput struct {
@@ -35,7 +40,7 @@ func (t *CommandTool) Name() string {
 
 // Description returns a description of the git command tool
 func (t *CommandTool) Description() string {
-	return "Runs arbitrary git sub-commands"
+	return commandToolDescription
 }
 
 // Schema returns the JSON schema for the git command tool

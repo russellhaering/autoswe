@@ -9,7 +9,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed commit.md
+var commitToolDescription string
 
 // CommitInput represents the input parameters for the Commit tool
 type CommitInput struct {
@@ -35,7 +40,7 @@ func (t *CommitTool) Name() string {
 
 // Description returns a description of the git commit tool
 func (t *CommitTool) Description() string {
-	return "Creates a git commit with the specified message"
+	return commitToolDescription
 }
 
 // Schema returns the JSON schema for the git commit tool

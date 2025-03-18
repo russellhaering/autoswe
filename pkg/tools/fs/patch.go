@@ -14,7 +14,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"github.com/russellhaering/autoswe/pkg/tools/fs/simplediff"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed patch.md
+var patchToolDescription string
 
 // PatchInput represents the input parameters for the Patch tool
 type PatchInput struct {
@@ -39,7 +44,7 @@ func (t *PatchTool) Name() string {
 
 // Description returns a description of the patch tool
 func (t *PatchTool) Description() string {
-	return "Patches a file by searching for and replacing specified text"
+	return patchToolDescription
 }
 
 // Schema returns the JSON schema for the patch tool

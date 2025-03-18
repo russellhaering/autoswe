@@ -11,7 +11,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed rm.md
+var rmToolDescription string
 
 // RmInput represents the input parameters for the Rm tool
 type RmInput struct {
@@ -35,7 +40,7 @@ func (t *RmTool) Name() string {
 
 // Description returns a description of the rm tool
 func (t *RmTool) Description() string {
-	return "Removes a file or directory"
+	return rmToolDescription
 }
 
 // Schema returns the JSON schema for the rm tool

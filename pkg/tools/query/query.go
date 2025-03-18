@@ -9,7 +9,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/index"
 	"github.com/russellhaering/autoswe/pkg/log"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed query.md
+var queryToolDescription string
 
 // Input represents the input parameters for the Query tool
 type Input struct {
@@ -43,7 +48,7 @@ func (t *QueryTool) Name() string {
 
 // Description returns a description of the query tool
 func (t *QueryTool) Description() string {
-	return "Performs a semantic search over the codebase and returns an AI-generated answer with relevant code examples"
+	return queryToolDescription
 }
 
 // Schema returns the JSON schema for the query tool

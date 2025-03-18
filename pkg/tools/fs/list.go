@@ -11,7 +11,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed list.md
+var listToolDescription string
 
 // ListInput represents the input parameters for the List tool
 type ListInput struct {
@@ -45,7 +50,7 @@ func (t *ListTool) Name() string {
 
 // Description returns a description of the list tool
 func (t *ListTool) Description() string {
-	return "Lists files and directories at the specified path"
+	return listToolDescription
 }
 
 // Schema returns the JSON schema for the list tool

@@ -12,7 +12,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed grep.md
+var grepToolDescription string
 
 // GrepInput represents the parameters for the grep operation
 type GrepInput struct {
@@ -47,7 +52,7 @@ func (t *GrepTool) Name() string {
 
 // Description returns a description of the grep tool
 func (t *GrepTool) Description() string {
-	return "Searches files for a regular expression pattern"
+	return grepToolDescription
 }
 
 // Schema returns the JSON schema for the grep tool

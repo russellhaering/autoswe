@@ -10,7 +10,12 @@ import (
 	"github.com/russellhaering/autoswe/pkg/log"
 	"github.com/russellhaering/autoswe/pkg/repo"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed fetch.md
+var fetchToolDescription string
 
 // FetchInput represents the input parameters for the Fetch tool
 type FetchInput struct {
@@ -35,7 +40,7 @@ func (t *FetchTool) Name() string {
 
 // Description returns a description of the fetch tool
 func (t *FetchTool) Description() string {
-	return "Reads the content of a file at the specified path"
+	return fetchToolDescription
 }
 
 // Schema returns the JSON schema for the fetch tool
