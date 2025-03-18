@@ -126,7 +126,7 @@ func (ddb *DocumentDB) SearchSimilar(queryContent string, k int) ([]Document, er
 
 	err = ddb.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(documentsBucket)
-		return b.ForEach(func(key, value []byte) error {
+		return b.ForEach(func(_, value []byte) error {
 			var doc Document
 			if err := json.Unmarshal(value, &doc); err != nil {
 				return err
@@ -162,7 +162,7 @@ func (ddb *DocumentDB) FilterDocuments(filters map[string]string) ([]Document, e
 
 	err := ddb.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(documentsBucket)
-		return b.ForEach(func(key, value []byte) error {
+		return b.ForEach(func(_, value []byte) error {
 			var doc Document
 			if err := json.Unmarshal(value, &doc); err != nil {
 				return err

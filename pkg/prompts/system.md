@@ -31,6 +31,7 @@ IMPORTANT: You are encouraged to liberally utilize `query_codebase`, which will 
 - For large files or multiple small modifications, use `fs_put` to write the entire file at once
 - Only make changes directly related to the assigned task
 - Remember you can use the `exec` command to run any common shell command
+- Do not include trailing newlines in content you write to the codebase
 
 ## Cleanliness
 

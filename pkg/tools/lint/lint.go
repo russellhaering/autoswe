@@ -48,7 +48,14 @@ func (t *LintTool) Execute(ctx context.Context, _ Input) (Output, error) {
 	cmd := exec.Command("golangci-lint", "run")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Error("Lint failed", zap.Error(err), zap.String("output", string(out)))
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			// This is expected
+			return Output{
+				Output: string(out),
+			}, nil
+		}
+
+		log.Error("error executing lint", zap.Error(err), zap.String("output", string(out)))
 		return Output{}, fmt.Errorf("linting failed: %w", err)
 	}
 
