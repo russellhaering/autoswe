@@ -11,7 +11,12 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/russellhaering/autoswe/pkg/log"
 	"go.uber.org/zap"
+
+	_ "embed"
 )
+
+//go:embed description.md
+var toolDescription string
 
 const astGrepImage = "ghcr.io/russellhaering/ast-grep-container:latest"
 
@@ -40,7 +45,7 @@ func (t *ASTGrepTool) Name() string {
 
 // Description returns a description of the astgrep tool
 func (t *ASTGrepTool) Description() string {
-	return "Performs AST-based code search using ast-grep. This tool uses structural search patterns to find code based on its abstract syntax tree structure, making it more precise than regex-based searches. The tool runs in a container using the ast-grep-container image."
+	return toolDescription
 }
 
 // Schema returns the JSON schema for the astgrep tool
