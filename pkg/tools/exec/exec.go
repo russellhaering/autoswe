@@ -78,6 +78,18 @@ func (t *ExecTool) Execute(ctx context.Context, input Input) (Output, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Error("Command failed", zap.Error(err), zap.String("output", string(out)))
+
+		// Check if this is an ExitError (command executed but returned non-zero exit code)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode := exitErr.ExitCode()
+			// Return the output with a prefix indicating failure, but don't return an error
+			// This makes the output available to the user even when the command fails
+			return Output{
+				Output: fmt.Sprintf("Command exited with non-zero status code %d\n\n%s",
+					exitCode, strings.TrimSpace(string(out))),
+			}, nil
+		}
+
 		return Output{}, fmt.Errorf("command failed: %w", err)
 	}
 
