@@ -39,8 +39,11 @@ func (m *Manager) processTask(ctx context.Context, task *Task) (string, error) {
 		message, err := m.AnthropicClient.Messages.New(ctx, anthropic.MessageNewParams{
 			Model:     anthropic.F(anthropic.ModelClaude3_7SonnetLatest),
 			MaxTokens: anthropic.Int(8192),
-			Messages:  anthropic.F(task.Messages),
-			Tools:     anthropic.F(toolParams),
+			System: anthropic.F([]anthropic.TextBlockParam{
+				anthropic.NewTextBlock(prompts.System),
+			}),
+			Messages: anthropic.F(task.Messages),
+			Tools:    anthropic.F(toolParams),
 		})
 		if err != nil {
 			return "", fmt.Errorf("failed to get message: %w", err)
@@ -154,7 +157,7 @@ func NewTask(description string, systemPrompt string) *Task {
 	return &Task{
 		Description: description,
 		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(systemPrompt)),
+			//anthropic.NewUserMessage(anthropic.NewTextBlock(systemPrompt)),
 			anthropic.NewUserMessage(anthropic.NewTextBlock(description)),
 		},
 	}

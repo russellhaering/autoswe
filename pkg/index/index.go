@@ -32,6 +32,7 @@ type Metadata struct {
 	Language string    `json:"language"`
 	ModTime  time.Time `json:"mod_time"`
 	Size     int64     `json:"size"`
+	Hash     string    `json:"hash"`
 }
 
 // Document represents a document in the index with metadata
@@ -178,8 +179,15 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 	// Get metadata
 	language := detectLanguage(path)
 
+	// Compute file hash
+	fileHash, err := ComputeFileHash(path)
+	if err != nil {
+		return fmt.Errorf("failed to compute hash for %s: %w", path, err)
+	}
+
 	log.Info("Indexing file",
-		zap.String("path", path))
+		zap.String("path", path),
+		zap.String("hash", fileHash))
 
 	// Delete any existing entries for this file
 	prefix := ComputeID("repo", path, -1)
@@ -196,6 +204,7 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 			"language":      language,
 			"mod_time":      info.ModTime().Format(time.RFC3339),
 			"size":          fmt.Sprintf("%d", info.Size()),
+			"hash":          fileHash,
 			"is_file_entry": "true",
 			"namespace":     "repo",
 		},
@@ -222,6 +231,7 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 				"language":      language,
 				"mod_time":      info.ModTime().Format(time.RFC3339),
 				"size":          fmt.Sprintf("%d", info.Size()),
+				"hash":          fileHash,
 				"start_line":    fmt.Sprintf("%d", summary.ContentSpan.StartLine),
 				"end_line":      fmt.Sprintf("%d", summary.ContentSpan.EndLine),
 				"is_file_entry": "false",
@@ -250,8 +260,8 @@ func ComputeID(namespace string, path string, idx int) string {
 	return fmt.Sprintf("%s:%s#%d", namespace, path, idx)
 }
 
-// needsReindexing checks if a file needs to be re-indexed by comparing its mod time
-// with the last indexed time stored in the metadata
+// needsReindexing checks if a file needs to be re-indexed by comparing both its mod time
+// and hash with the values stored in the metadata
 func (i *Indexer) needsReindexing(ctx context.Context, namespace, path string, info fs.FileInfo) (bool, error) {
 	// Get the file-level entry
 	fileID := ComputeID(namespace, path, -1)
@@ -276,16 +286,45 @@ func (i *Indexer) needsReindexing(ctx context.Context, namespace, path string, i
 	fileModTime := info.ModTime()
 
 	// Compare modification times using Unix timestamps to avoid precision issues
-	needsUpdate := fileModTime.Unix() > lastModTime.Unix()
+	modTimeChanged := fileModTime.Unix() > lastModTime.Unix()
+
+	// If mod time hasn't changed, we can skip the hash calculation
+	if !modTimeChanged {
+		return false, nil
+	}
+
+	// Calculate current file hash
+	currentHash, err := ComputeFileHash(path)
+	if err != nil {
+		log.Debug("Failed to compute file hash, forcing reindex",
+			zap.String("path", path),
+			zap.Error(err))
+		return true, nil
+	}
+
+	// Get the stored hash from metadata
+	storedHash, hashExists := doc.Metadata["hash"]
+
+	// If no hash exists in metadata or hash has changed, reindex
+	hashChanged := !hashExists || currentHash != storedHash
+
+	needsUpdate := modTimeChanged && hashChanged
 
 	if needsUpdate {
-		log.Debug("File needs update",
+		log.Debug("File needs update - changed content detected",
 			zap.String("path", path),
 			zap.String("namespace", namespace),
 			zap.Time("file_mod_time", fileModTime),
-			zap.Int64("file_mod_time_nano", fileModTime.UnixNano()),
 			zap.Time("last_indexed", lastModTime),
-			zap.Int64("last_indexed_nano", lastModTime.UnixNano()))
+			zap.String("current_hash", currentHash),
+			zap.String("stored_hash", storedHash))
+	} else if modTimeChanged {
+		log.Debug("File modified time changed but content is the same (hash unchanged)",
+			zap.String("path", path),
+			zap.String("namespace", namespace),
+			zap.Time("file_mod_time", fileModTime),
+			zap.Time("last_indexed", lastModTime),
+			zap.String("hash", currentHash))
 	}
 
 	return needsUpdate, nil
