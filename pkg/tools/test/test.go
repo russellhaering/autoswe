@@ -21,28 +21,28 @@ type Output struct {
 	Output string `json:"output"`
 }
 
-// TestTool implements the Test tool
-type TestTool struct{}
+// Tool implements the Test tool
+type Tool struct{}
 
-var ProvideTestTool = wire.Struct(new(TestTool), "*")
+var ProvideTestTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *TestTool) Name() string {
+func (t *Tool) Name() string {
 	return "test"
 }
 
 // Description returns a description of the test tool
-func (t *TestTool) Description() string {
+func (t *Tool) Description() string {
 	return "Runs project tests using 'go test -v ./...'"
 }
 
 // Schema returns the JSON schema for the test tool
-func (t *TestTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the test operation
-func (t *TestTool) Execute(ctx context.Context, _ Input) (Output, error) {
+func (t *Tool) Execute(_ context.Context, _ Input) (Output, error) {
 	log.Info("Starting test operation")
 
 	cmd := exec.Command("go", "test", "-v", "./...")

@@ -27,28 +27,28 @@ type Output struct {
 	Output string `json:"output" description:"The output of the command"`
 }
 
-// ExecTool implements the Exec tool
-type ExecTool struct{}
+// Tool implements the Exec tool
+type Tool struct{}
 
-var ProvideExecTool = wire.Struct(new(ExecTool), "*")
+var ProvideExecTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *ExecTool) Name() string {
+func (t *Tool) Name() string {
 	return "exec"
 }
 
 // Description returns a description of the exec tool
-func (t *ExecTool) Description() string {
+func (t *Tool) Description() string {
 	return fmt.Sprintf("Executes a shell command with the project as the working directory. Commands are executed in a container running the '%s' Docker image with a bash shell.", DockerImage)
 }
 
 // Schema returns the JSON schema for the exec tool
-func (t *ExecTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the exec operation
-func (t *ExecTool) Execute(ctx context.Context, input Input) (Output, error) {
+func (t *Tool) Execute(_ context.Context, input Input) (Output, error) {
 	log.Info("Starting exec operation", zap.Strings("command", input.Command))
 
 	if len(input.Command) == 0 {

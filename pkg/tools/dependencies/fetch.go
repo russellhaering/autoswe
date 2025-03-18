@@ -42,7 +42,7 @@ func (t *FetchTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the fetch operation
-func (t *FetchTool) Execute(ctx context.Context, _ FetchInput) (FetchOutput, error) {
+func (t *FetchTool) Execute(_ context.Context, _ FetchInput) (FetchOutput, error) {
 	log.Info("Starting go mod download")
 
 	cmd := exec.Command("go", "mod", "download")

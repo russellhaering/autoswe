@@ -51,7 +51,7 @@ func (t *ListTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the list operation
-func (t *ListTool) Execute(ctx context.Context, _ ListInput) (ListOutput, error) {
+func (t *ListTool) Execute(_ context.Context, _ ListInput) (ListOutput, error) {
 	log.Info("Starting package analysis")
 
 	cfg := &packages.Config{

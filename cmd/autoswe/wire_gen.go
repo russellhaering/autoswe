@@ -49,7 +49,7 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	buildTool := &build.BuildTool{}
 	fetchTool := &dependencies.FetchTool{}
 	listTool := &dependencies.ListTool{}
-	execTool := &exec.ExecTool{}
+	execTool := &exec.Tool{}
 	formatTool := &format.FormatTool{}
 	commandTool := &git.CommandTool{
 		RepoFS: repoFS,
@@ -57,8 +57,8 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	commitTool := &git.CommitTool{
 		RepoFS: repoFS,
 	}
-	lintTool := &lint.LintTool{}
-	testTool := &test.TestTool{}
+	lintTool := &lint.Tool{}
+	testTool := &test.Tool{}
 	queryTool := &query.QueryTool{
 		Indexer: indexer,
 	}

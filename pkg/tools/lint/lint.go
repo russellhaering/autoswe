@@ -21,28 +21,28 @@ type Output struct {
 	Output string `json:"output"`
 }
 
-// LintTool implements the Lint tool
-type LintTool struct{}
+// Tool implements the Lint tool
+type Tool struct{}
 
-var ProvideLintTool = wire.Struct(new(LintTool), "*")
+var ProvideLintTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *LintTool) Name() string {
+func (t *Tool) Name() string {
 	return "lint"
 }
 
 // Description returns a description of the lint tool
-func (t *LintTool) Description() string {
+func (t *Tool) Description() string {
 	return "Runs golangci-lint on the project"
 }
 
 // Schema returns the JSON schema for the lint tool
-func (t *LintTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the lint operation
-func (t *LintTool) Execute(ctx context.Context, _ Input) (Output, error) {
+func (t *Tool) Execute(_ context.Context, _ Input) (Output, error) {
 	log.Info("Starting lint operation")
 
 	cmd := exec.Command("golangci-lint", "run")

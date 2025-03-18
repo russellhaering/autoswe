@@ -215,7 +215,7 @@ func (ddb *DocumentDB) ListDocuments() ([]Document, error) {
 
 	err := ddb.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(documentsBucket)
-		return b.ForEach(func(k, v []byte) error {
+		return b.ForEach(func(_, v []byte) error {
 			var doc Document
 			if err := json.Unmarshal(v, &doc); err != nil {
 				return err
@@ -317,7 +317,7 @@ func (ddb *DocumentDB) Query(queryContent string, limit int, filters map[string]
 
 	err = ddb.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(documentsBucket)
-		return b.ForEach(func(key, value []byte) error {
+		return b.ForEach(func(_, value []byte) error {
 			var doc Document
 			if err := json.Unmarshal(value, &doc); err != nil {
 				return err

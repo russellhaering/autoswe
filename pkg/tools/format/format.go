@@ -42,7 +42,7 @@ func (t *FormatTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the format operation
-func (t *FormatTool) Execute(ctx context.Context, _ Input) (Output, error) {
+func (t *FormatTool) Execute(_ context.Context, _ Input) (Output, error) {
 	log.Info("Starting format operation")
 
 	cmd := exec.Command("goimports", "-w", ".")

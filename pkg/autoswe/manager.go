@@ -28,17 +28,17 @@ func ProvideGemini(ctx context.Context, geminiAPIKey GeminiAPIKey) (*genai.Clien
 		return nil, nil, err
 	}
 
-	close := func() {
+	cleanup := func() {
 		err := client.Close()
 		if err != nil {
 			log.Error("error closing gemini client", zap.Error(err))
 		}
 	}
 
-	return client, close, nil
+	return client, cleanup, nil
 }
 
-func ProvideAnthropic(ctx context.Context, anthropicAPIKey AnthropicAPIKey) *anthropic.Client {
+func ProvideAnthropic(_ context.Context, anthropicAPIKey AnthropicAPIKey) *anthropic.Client {
 	return anthropic.NewClient(
 		anthropicoption.WithAPIKey(string(anthropicAPIKey)),
 		anthropicoption.WithMiddleware(func(req *http.Request, next anthropicoption.MiddlewareNext) (*http.Response, error) {
@@ -64,7 +64,7 @@ func ProvideRepoFS(rootDir RootDir) *repo.RepoFS {
 	return repo.NewRepoFS(string(rootDir))
 }
 
-func ProvideFilteredFS(ctx context.Context, rfs *repo.RepoFS) (repo.FilteredFS, error) {
+func ProvideFilteredFS(_ context.Context, rfs *repo.RepoFS) (repo.FilteredFS, error) {
 	return rfs.Filter()
 }
 
@@ -77,14 +77,14 @@ func ProvideIndexer(ctx context.Context, gemini *genai.Client, rfs repo.Filtered
 		return nil, nil, err
 	}
 
-	close := func() {
+	cleanup := func() {
 		err := indexer.Close()
 		if err != nil {
 			log.Error("error closing indexer", zap.Error(err))
 		}
 	}
 
-	return indexer, close, nil
+	return indexer, cleanup, nil
 }
 
 type Config struct {
