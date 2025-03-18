@@ -13,8 +13,9 @@ import (
 
 // Task represents a single task with its conversation context
 type Task struct {
-	Description string
-	Messages    []anthropic.MessageParam
+	SystemPrompt string
+	Description  string
+	Messages     []anthropic.MessageParam
 }
 
 // Clone creates a copy of the task's messages for a new context
@@ -40,7 +41,7 @@ func (m *Manager) processTask(ctx context.Context, task *Task) (string, error) {
 			Model:     anthropic.F(anthropic.ModelClaude3_7SonnetLatest),
 			MaxTokens: anthropic.Int(8192),
 			System: anthropic.F([]anthropic.TextBlockParam{
-				anthropic.NewTextBlock(prompts.System),
+				anthropic.NewTextBlock(task.SystemPrompt),
 			}),
 			Messages: anthropic.F(task.Messages),
 			Tools:    anthropic.F(toolParams),
@@ -155,9 +156,9 @@ func (m *Manager) executeToolCall(ctx context.Context, toolCall registry.ToolCal
 // NewTask creates a new task with the given description and system prompt
 func NewTask(description string, systemPrompt string) *Task {
 	return &Task{
-		Description: description,
+		SystemPrompt: systemPrompt,
+		Description:  description,
 		Messages: []anthropic.MessageParam{
-			//anthropic.NewUserMessage(anthropic.NewTextBlock(systemPrompt)),
 			anthropic.NewUserMessage(anthropic.NewTextBlock(description)),
 		},
 	}

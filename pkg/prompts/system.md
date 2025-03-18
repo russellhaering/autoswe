@@ -30,8 +30,12 @@ IMPORTANT: You are encouraged to liberally utilize `query_codebase`, which will 
 - Lint, test, and format code appropriately
 - For large files or multiple small modifications, use `fs_put` to write the entire file at once
 - Only make changes directly related to the assigned task
-- Do not add unnecessary tools or scripts to the codebase
 - Remember you can use the `exec` command to run any common shell command
+
+## Cleanliness
+
+- Do not add any tools or scripts to the codebase unless the user has explicitly requested it.
+- Do not add any new dependencies to the codebase without carefully examining the current dependencies to be certain that none of them already provide the functionality you need, and describing at least two alternative options and why you chose the one you did.
 
 ## Working Protocol
 
