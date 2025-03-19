@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"crypto/sha256"
+	"io"
+
 	"github.com/google/generative-ai-go/genai"
 	"github.com/russellhaering/autoswe/pkg/db"
 	"github.com/russellhaering/autoswe/pkg/log"
@@ -169,9 +172,15 @@ func (i *Indexer) GetIndexedFiles(_ context.Context) ([]FileRef, error) {
 }
 
 // indexFile indexes a single file and adds it to the collection
-func (i *Indexer) indexFile(ctx context.Context, path string) error {
-	// Get file info
-	info, err := os.Stat(path)
+func (i *Indexer) indexFile(ctx context.Context, namespace, path string) error {
+	// Get file info from the appropriate filesystem
+	fsys, ok := i.fss[namespace]
+	if !ok {
+		return fmt.Errorf("unknown namespace: %s", namespace)
+	}
+
+	// Get file info using the filesystem
+	info, err := fs.Stat(fsys, path)
 	if err != nil {
 		return fmt.Errorf("failed to get info for %s: %w", path, err)
 	}
@@ -179,18 +188,32 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 	// Get metadata
 	language := detectLanguage(path)
 
-	// Compute file hash
-	fileHash, err := ComputeFileHash(path)
+	// Read file content using the filesystem
+	file, err := fsys.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file %s: %w", path, err)
+	}
+	defer file.Close()
+
+	// Read file content for hash calculation
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("failed to read file %s: %w", path, err)
+	}
+
+	// Compute file hash from content
+	fileHash, err := ComputeContentHash(content)
 	if err != nil {
 		return fmt.Errorf("failed to compute hash for %s: %w", path, err)
 	}
 
 	log.Info("Indexing file",
 		zap.String("path", path),
+		zap.String("namespace", namespace),
 		zap.String("hash", fileHash))
 
 	// Delete any existing entries for this file
-	prefix := ComputeID("repo", path, -1)
+	prefix := ComputeID(namespace, path, -1)
 	if err := i.db.DeleteDocumentsWithPrefix(prefix); err != nil {
 		return fmt.Errorf("failed to delete existing entries: %w", err)
 	}
@@ -206,7 +229,7 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 			"size":          fmt.Sprintf("%d", info.Size()),
 			"hash":          fileHash,
 			"is_file_entry": "true",
-			"namespace":     "repo",
+			"namespace":     namespace,
 		},
 	}
 
@@ -214,8 +237,23 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 		return fmt.Errorf("failed to add file-level entry: %w", err)
 	}
 
-	// Extract semantic summaries
-	summaries, err := i.ExtractFileSummaries(ctx, path)
+	// Create a temporary file with the content for extracting summaries
+	tempFile, err := os.CreateTemp("", "autoswe-index-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tempFilePath := tempFile.Name()
+	defer os.Remove(tempFilePath) // Clean up temp file when done
+
+	// Write content to temp file
+	if _, err := tempFile.Write(content); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+	tempFile.Close()
+
+	// Extract semantic summaries from the temp file
+	summaries, err := i.ExtractFileSummaries(ctx, tempFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to extract summaries from file: %w", err)
 	}
@@ -224,7 +262,7 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 	var docs []db.Document
 	for idx, summary := range summaries {
 		doc := db.Document{
-			ID:      ComputeID("repo", path, idx),
+			ID:      ComputeID(namespace, path, idx),
 			Content: summary.Summary,
 			Metadata: map[string]string{
 				"path":          path,
@@ -235,7 +273,7 @@ func (i *Indexer) indexFile(ctx context.Context, path string) error {
 				"start_line":    fmt.Sprintf("%d", summary.ContentSpan.StartLine),
 				"end_line":      fmt.Sprintf("%d", summary.ContentSpan.EndLine),
 				"is_file_entry": "false",
-				"namespace":     "repo",
+				"namespace":     namespace,
 			},
 		}
 		docs = append(docs, doc)
@@ -260,9 +298,19 @@ func ComputeID(namespace string, path string, idx int) string {
 	return fmt.Sprintf("%s:%s#%d", namespace, path, idx)
 }
 
+// ComputeContentHash computes a hash for the given content
+func ComputeContentHash(content []byte) (string, error) {
+	h := sha256.New()
+	_, err := h.Write(content)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
 // needsReindexing checks if a file needs to be re-indexed by comparing both its mod time
 // and hash with the values stored in the metadata
-func (i *Indexer) needsReindexing(_ context.Context, namespace, path string, info fs.FileInfo) (bool, error) {
+func (i *Indexer) needsReindexing(ctx context.Context, namespace, path string, info fs.FileInfo) (bool, error) {
 	// Get the file-level entry
 	fileID := ComputeID(namespace, path, -1)
 	doc, err := i.db.GetDocument(fileID)
@@ -293,11 +341,37 @@ func (i *Indexer) needsReindexing(_ context.Context, namespace, path string, inf
 		return false, nil
 	}
 
+	// Get file content for hash calculation
+	fsys, ok := i.fss[namespace]
+	if !ok {
+		return true, fmt.Errorf("unknown namespace: %s", namespace)
+	}
+
+	file, err := fsys.Open(path)
+	if err != nil {
+		log.Debug("Failed to open file, forcing reindex",
+			zap.String("path", path),
+			zap.String("namespace", namespace),
+			zap.Error(err))
+		return true, nil
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		log.Debug("Failed to read file content, forcing reindex",
+			zap.String("path", path),
+			zap.String("namespace", namespace),
+			zap.Error(err))
+		return true, nil
+	}
+
 	// Calculate current file hash
-	currentHash, err := ComputeFileHash(path)
+	currentHash, err := ComputeContentHash(content)
 	if err != nil {
 		log.Debug("Failed to compute file hash, forcing reindex",
 			zap.String("path", path),
+			zap.String("namespace", namespace),
 			zap.Error(err))
 		return true, nil
 	}
@@ -392,7 +466,7 @@ func (i *Indexer) UpdateIndex(ctx context.Context) error {
 				return nil
 			}
 
-			if err := i.indexFile(ctx, path); err != nil {
+			if err := i.indexFile(ctx, namespace, path); err != nil {
 				log.Warn("Failed to index file",
 					zap.String("path", path),
 					zap.Error(err))
@@ -560,6 +634,10 @@ File contents:
 	// Convert to ContentSummary objects and validate
 	var summaries []ContentSummary
 	for i, s := range result.Summaries {
+		if s.StartLine > s.EndLine {
+			s.StartLine, s.EndLine = s.EndLine, s.StartLine
+		}
+
 		// Validate line numbers
 		if s.StartLine < 1 || s.EndLine < s.StartLine || s.EndLine > len(lines) {
 			return nil, fmt.Errorf("invalid line range %d-%d at index %d", s.StartLine, s.EndLine, i)

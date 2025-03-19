@@ -33,13 +33,13 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	anthropicAPIKey := config.AnthropicAPIKey
 	anthropicClient := autoswe.ProvideAnthropic(ctx, anthropicAPIKey)
 	autosweRootDir := config.RootDir
-	repoFS := autoswe.ProvideRepoFS(autosweRootDir)
-	filteredFS, err := autoswe.ProvideFilteredFS(ctx, repoFS)
+	repositoryFS := autoswe.ProvideRepoFS(autosweRootDir)
+	filteredFS, err := autoswe.ProvideFilteredFS(ctx, repositoryFS)
 	if err != nil {
 		cleanup()
 		return autoswe.Manager{}, nil, err
 	}
-	indexer, cleanup2, err := autoswe.ProvideIndexer(ctx, client, filteredFS)
+	indexer, cleanup2, err := autoswe.ProvideIndexer(ctx, client, filteredFS, config)
 	if err != nil {
 		cleanup()
 		return autoswe.Manager{}, nil, err
@@ -51,10 +51,10 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	execTool := &exec.Tool{}
 	formatTool := &format.Tool{}
 	commandTool := &git.CommandTool{
-		RepoFS: repoFS,
+		RepoFS: repositoryFS,
 	}
 	commitTool := &git.CommitTool{
-		RepoFS: repoFS,
+		RepoFS: repositoryFS,
 	}
 	lintTool := &lint.Tool{}
 	testTool := &test.Tool{}
@@ -84,7 +84,7 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	autosweManager := autoswe.Manager{
 		GeminiClient:    client,
 		AnthropicClient: anthropicClient,
-		RepoFS:          repoFS,
+		RepoFS:          repositoryFS,
 		FilteredFS:      filteredFS,
 		Indexer:         indexer,
 		ToolRegistry:    toolRegistry,

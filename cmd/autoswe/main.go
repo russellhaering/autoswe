@@ -22,9 +22,10 @@ var (
 		Long:  `autoswe is a command-line tool that uses AI to assist with Go software engineering tasks. It provides various commands for code analysis, indexing, and task automation.`,
 		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 			_manager, _, err := initializeManager(context.Background(), autoswe.Config{
-				GeminiAPIKey:    autoswe.GeminiAPIKey(geminiKey),
-				AnthropicAPIKey: autoswe.AnthropicAPIKey(anthropicKey),
-				RootDir:         autoswe.RootDir(rootDir),
+				GeminiAPIKey:      autoswe.GeminiAPIKey(geminiKey),
+				AnthropicAPIKey:   autoswe.AnthropicAPIKey(anthropicKey),
+				RootDir:           autoswe.RootDir(rootDir),
+				ExtraContextPaths: extraContextPaths,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to initialize manager: %w", err)
@@ -36,9 +37,10 @@ var (
 	}
 
 	// Configuration flags
-	geminiKey    string
-	rootDir      string
-	anthropicKey string
+	geminiKey         string
+	rootDir           string
+	anthropicKey      string
+	extraContextPaths []string
 )
 
 func init() {
@@ -130,8 +132,6 @@ func newContextCmd() *cobra.Command {
 
 // newTaskCmd creates the task command
 func newTaskCmd() *cobra.Command {
-	var extraContextPaths []string
-
 	cmd := &cobra.Command{
 		Use:   "task \"<task description>\"",
 		Short: "Run an AI-assisted task",
@@ -139,8 +139,6 @@ func newTaskCmd() *cobra.Command {
 The task description should be a clear, natural language description of what you want to accomplish.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Add extra context paths
-
 			response, err := manager.ExecuteTask(cmd.Context(), args[0])
 			if err != nil {
 				return fmt.Errorf("failed to execute task: %w", err)

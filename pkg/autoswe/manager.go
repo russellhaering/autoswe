@@ -68,11 +68,39 @@ func ProvideFilteredFS(_ context.Context, rfs *repo.RepositoryFS) (repo.Filtered
 	return rfs.Filter()
 }
 
-func ProvideIndexer(ctx context.Context, gemini *genai.Client, rfs repo.FilteredFS) (*index.Indexer, func(), error) {
-	indexer, err := index.NewIndexer(ctx, gemini, index.FSContextMap{
+func ProvideIndexer(ctx context.Context, gemini *genai.Client, rfs repo.FilteredFS, config Config) (*index.Indexer, func(), error) {
+	// Create context map with repo filesystem
+	fsContextMap := index.FSContextMap{
 		index.RepoNamespace: rfs,
-		// TODO: extra context
-	})
+	}
+
+	// Add extra context files if provided
+	if len(config.ExtraContextPaths) > 0 {
+		log.Info("Adding extra context files", zap.Strings("paths", config.ExtraContextPaths))
+
+		// Create virtual filesystem
+		virtualFS := repo.NewVirtualFS()
+
+		// Add each file to the virtual filesystem
+		for _, path := range config.ExtraContextPaths {
+			if err := virtualFS.AddFile(path); err != nil {
+				log.Warn("Failed to add extra context file", zap.String("path", path), zap.Error(err))
+				continue
+			}
+			log.Debug("Added extra context file", zap.String("path", path))
+		}
+
+		// Create filtered virtual filesystem
+		filteredVirtualFS, err := virtualFS.Filter()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Add to context map
+		fsContextMap[index.ExtraContextNamespace] = filteredVirtualFS
+	}
+
+	indexer, err := index.NewIndexer(ctx, gemini, fsContextMap)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -88,9 +116,10 @@ func ProvideIndexer(ctx context.Context, gemini *genai.Client, rfs repo.Filtered
 }
 
 type Config struct {
-	GeminiAPIKey    GeminiAPIKey
-	AnthropicAPIKey AnthropicAPIKey
-	RootDir         RootDir
+	GeminiAPIKey      GeminiAPIKey
+	AnthropicAPIKey   AnthropicAPIKey
+	RootDir           RootDir
+	ExtraContextPaths []string
 }
 
 // Manager handles centralized client instantiation and access
@@ -112,7 +141,7 @@ func (m *Manager) Close() error {
 }
 
 var ProviderSet = wire.NewSet(
-	wire.FieldsOf(new(Config), "GeminiAPIKey", "AnthropicAPIKey", "RootDir"),
+	wire.FieldsOf(new(Config), "GeminiAPIKey", "AnthropicAPIKey", "RootDir", "ExtraContextPaths"),
 	ProvideGemini,
 	ProvideAnthropic,
 	ProvideRepoFS,
