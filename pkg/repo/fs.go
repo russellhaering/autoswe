@@ -43,23 +43,23 @@ var (
 	}
 )
 
-type RepoFS struct {
+type RepositoryFS struct {
 	fs.ReadDirFS
 	basePath string // Store the base path explicitly
 }
 
-func NewRepoFS(path string) *RepoFS {
-	return &RepoFS{
+func NewRepoFS(path string) *RepositoryFS {
+	return &RepositoryFS{
 		ReadDirFS: os.DirFS(path).(fs.ReadDirFS),
 		basePath:  path,
 	}
 }
 
-func (r *RepoFS) Path() string {
+func (r *RepositoryFS) Path() string {
 	return r.basePath
 }
 
-func (r *RepoFS) Filter() (FilteredFS, error) {
+func (r *RepositoryFS) Filter() (FilteredFS, error) {
 	bytes, err := fs.ReadFile(r, ".autosweignore")
 	if err != nil {
 		log.Debug("No .autosweignore file found, using default ignore rules")
@@ -299,7 +299,7 @@ func (f *filteredFS) RemoveAll(name string) error {
 	info, err := os.Stat(absPath)
 	if err == nil && info.IsDir() {
 		var hasFiltered bool
-		err := filepath.WalkDir(absPath, func(path string, d fs.DirEntry, err error) error {
+		err := filepath.WalkDir(absPath, func(path string, _ fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}

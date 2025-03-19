@@ -28,7 +28,7 @@ type CommandOutput struct {
 
 // CommandTool implements the git command tool
 type CommandTool struct {
-	RepoFS *repo.RepoFS
+	RepoFS *repo.RepositoryFS
 }
 
 var ProvideCommandTool = wire.Struct(new(CommandTool), "*")
@@ -49,7 +49,7 @@ func (t *CommandTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the git command operation
-func (t *CommandTool) Execute(ctx context.Context, input CommandInput) (CommandOutput, error) {
+func (t *CommandTool) Execute(_ context.Context, input CommandInput) (CommandOutput, error) {
 	log.Info("Starting git command operation", zap.Any("args", input.Args))
 
 	if len(input.Args) == 0 {

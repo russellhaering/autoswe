@@ -49,7 +49,7 @@ func (t *RmTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the rm operation
-func (t *RmTool) Execute(ctx context.Context, input RmInput) (RmOutput, error) {
+func (t *RmTool) Execute(_ context.Context, input RmInput) (RmOutput, error) {
 	log.Info("Starting remove operation", zap.String("path", input.Path), zap.Bool("recursive", input.Recursive))
 
 	var err error

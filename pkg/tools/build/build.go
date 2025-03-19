@@ -21,28 +21,28 @@ type Output struct {
 	Output string `json:"output"`
 }
 
-// BuildTool implements the Build tool
-type BuildTool struct{}
+// Tool implements the Build tool
+type Tool struct{}
 
-var ProvideBuildTool = wire.Struct(new(BuildTool), "*")
+var ProvideBuildTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *BuildTool) Name() string {
+func (t *Tool) Name() string {
 	return "build"
 }
 
 // Description returns a description of the build tool
-func (t *BuildTool) Description() string {
+func (t *Tool) Description() string {
 	return "Compiles the project using 'go build ./...'"
 }
 
 // Schema returns the JSON schema for the build tool
-func (t *BuildTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the build operation
-func (t *BuildTool) Execute(ctx context.Context, _ Input) (Output, error) {
+func (t *Tool) Execute(_ context.Context, _ Input) (Output, error) {
 	log.Info("Starting build operation")
 
 	cmd := exec.Command("go", "build", "./...")

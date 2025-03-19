@@ -59,7 +59,7 @@ func (t *ListTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the list operation
-func (t *ListTool) Execute(ctx context.Context, input ListInput) (ListOutput, error) {
+func (t *ListTool) Execute(_ context.Context, input ListInput) (ListOutput, error) {
 	log.Info("Starting list operation", zap.String("path", input.Path))
 
 	// Check if path exists in the filtered FS

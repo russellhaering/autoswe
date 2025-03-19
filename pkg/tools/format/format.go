@@ -21,28 +21,28 @@ type Output struct {
 	Output string `json:"output"`
 }
 
-// FormatTool implements the Format tool
-type FormatTool struct{}
+// Tool implements the Format tool
+type Tool struct{}
 
-var ProvideFormatTool = wire.Struct(new(FormatTool), "*")
+var ProvideFormatTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *FormatTool) Name() string {
+func (t *Tool) Name() string {
 	return "format"
 }
 
 // Description returns a description of the format tool
-func (t *FormatTool) Description() string {
+func (t *Tool) Description() string {
 	return "Runs goimports on all Go files in the project"
 }
 
 // Schema returns the JSON schema for the format tool
-func (t *FormatTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the format operation
-func (t *FormatTool) Execute(_ context.Context, _ Input) (Output, error) {
+func (t *Tool) Execute(_ context.Context, _ Input) (Output, error) {
 	log.Info("Starting format operation")
 
 	cmd := exec.Command("goimports", "-w", ".")

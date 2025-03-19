@@ -18,7 +18,7 @@ type MockPatchTool struct {
 }
 
 // Mock Execute method that directly uses simplediff
-func (m *MockPatchTool) Execute(ctx context.Context, input PatchInput) (PatchOutput, error) {
+func (m *MockPatchTool) Execute(_ context.Context, input PatchInput) (PatchOutput, error) {
 	m.ApplyPatchCalled = true
 
 	if input.Diff == "" {

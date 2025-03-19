@@ -144,12 +144,12 @@ func ParseFileRef(id string) (FileRef, error) {
 }
 
 // deleteFileEntries removes all existing entries for a given file path from the index
-func (i *Indexer) deleteFileEntries(ctx context.Context, path string) error {
+func (i *Indexer) deleteFileEntries(_ context.Context, path string) error {
 	return i.db.DeleteDocumentsWithPrefix(path)
 }
 
 // GetIndexedFiles returns a sorted list of all file paths that have been indexed
-func (i *Indexer) GetIndexedFiles(ctx context.Context) ([]FileRef, error) {
+func (i *Indexer) GetIndexedFiles(_ context.Context) ([]FileRef, error) {
 	// Get all documents with is_file_entry=true in metadata
 	docs, err := i.db.FilterDocuments(map[string]string{"is_file_entry": "true"})
 	if err != nil {
@@ -262,7 +262,7 @@ func ComputeID(namespace string, path string, idx int) string {
 
 // needsReindexing checks if a file needs to be re-indexed by comparing both its mod time
 // and hash with the values stored in the metadata
-func (i *Indexer) needsReindexing(ctx context.Context, namespace, path string, info fs.FileInfo) (bool, error) {
+func (i *Indexer) needsReindexing(_ context.Context, namespace, path string, info fs.FileInfo) (bool, error) {
 	// Get the file-level entry
 	fileID := ComputeID(namespace, path, -1)
 	doc, err := i.db.GetDocument(fileID)
@@ -416,7 +416,7 @@ func (i *Indexer) UpdateIndex(ctx context.Context) error {
 }
 
 // Search performs a semantic search over the indexed codebase
-func (i *Indexer) Search(ctx context.Context, query string, queryLimit int) ([]db.SearchResult, error) {
+func (i *Indexer) Search(_ context.Context, query string, queryLimit int) ([]db.SearchResult, error) {
 
 	// Get total document count
 	count, err := i.db.Count()

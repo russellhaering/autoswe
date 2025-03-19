@@ -33,28 +33,28 @@ type Output struct {
 	Output string `json:"output"`
 }
 
-// ASTGrepTool implements the ASTGrep tool
-type ASTGrepTool struct{}
+// Tool implements the ASTGrep tool
+type Tool struct{}
 
-var ProvideASTGrepTool = wire.Struct(new(ASTGrepTool), "*")
+var ProvideASTGrepTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *ASTGrepTool) Name() string {
+func (t *Tool) Name() string {
 	return "ast_grep"
 }
 
 // Description returns a description of the astgrep tool
-func (t *ASTGrepTool) Description() string {
+func (t *Tool) Description() string {
 	return toolDescription
 }
 
 // Schema returns the JSON schema for the astgrep tool
-func (t *ASTGrepTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the astgrep operation
-func (t *ASTGrepTool) Execute(ctx context.Context, input Input) (Output, error) {
+func (t *Tool) Execute(_ context.Context, input Input) (Output, error) {
 	log.Info("Starting ast-grep operation", zap.String("pattern", input.Pattern))
 
 	if input.Pattern == "" {

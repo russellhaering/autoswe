@@ -34,30 +34,30 @@ type CodeExample struct {
 	Content   string `json:"content"`    // The actual code content
 }
 
-// QueryTool implements the Query tool
-type QueryTool struct {
+// Tool implements the Query tool
+type Tool struct {
 	Indexer *index.Indexer
 }
 
-var ProvideQueryTool = wire.Struct(new(QueryTool), "*")
+var ProvideQueryTool = wire.Struct(new(Tool), "*")
 
 // Name returns the name of the tool
-func (t *QueryTool) Name() string {
+func (t *Tool) Name() string {
 	return "query_codebase"
 }
 
 // Description returns a description of the query tool
-func (t *QueryTool) Description() string {
+func (t *Tool) Description() string {
 	return queryToolDescription
 }
 
 // Schema returns the JSON schema for the query tool
-func (t *QueryTool) Schema() *jsonschema.Schema {
+func (t *Tool) Schema() *jsonschema.Schema {
 	return jsonschema.Reflect(&Input{})
 }
 
 // Execute implements the query operation
-func (t *QueryTool) Execute(ctx context.Context, input Input) (Output, error) {
+func (t *Tool) Execute(ctx context.Context, input Input) (Output, error) {
 	log.Info("Starting codebase query operation", zap.String("query", input.Query))
 
 	// Perform the query

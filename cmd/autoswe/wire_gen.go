@@ -8,7 +8,6 @@ package main
 
 import (
 	"context"
-
 	"github.com/russellhaering/autoswe/pkg/autoswe"
 	"github.com/russellhaering/autoswe/pkg/tools/astgrep"
 	"github.com/russellhaering/autoswe/pkg/tools/build"
@@ -45,12 +44,12 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 		cleanup()
 		return autoswe.Manager{}, nil, err
 	}
-	astGrepTool := &astgrep.ASTGrepTool{}
-	buildTool := &build.BuildTool{}
+	tool := &astgrep.Tool{}
+	buildTool := &build.Tool{}
 	fetchTool := &dependencies.FetchTool{}
 	listTool := &dependencies.ListTool{}
 	execTool := &exec.Tool{}
-	formatTool := &format.FormatTool{}
+	formatTool := &format.Tool{}
 	commandTool := &git.CommandTool{
 		RepoFS: repoFS,
 	}
@@ -59,7 +58,7 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	}
 	lintTool := &lint.Tool{}
 	testTool := &test.Tool{}
-	queryTool := &query.QueryTool{
+	queryTool := &query.Tool{
 		Indexer: indexer,
 	}
 	fsFetchTool := &fs.FetchTool{
@@ -81,7 +80,7 @@ func initializeManager(ctx context.Context, config autoswe.Config) (autoswe.Mana
 	rmTool := &fs.RmTool{
 		FilteredFS: filteredFS,
 	}
-	toolRegistry := registry.ProvideToolRegistry(astGrepTool, buildTool, fetchTool, listTool, execTool, formatTool, commandTool, commitTool, lintTool, testTool, queryTool, fsFetchTool, grepTool, fsListTool, patchTool, putTool, rmTool)
+	toolRegistry := registry.ProvideToolRegistry(tool, buildTool, fetchTool, listTool, execTool, formatTool, commandTool, commitTool, lintTool, testTool, queryTool, fsFetchTool, grepTool, fsListTool, patchTool, putTool, rmTool)
 	autosweManager := autoswe.Manager{
 		GeminiClient:    client,
 		AnthropicClient: anthropicClient,

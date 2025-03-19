@@ -64,17 +64,17 @@ type ToolRegistry struct {
 }
 
 func ProvideToolRegistry(
-	astGrepTool *astgrep.ASTGrepTool,
-	buildTool *build.BuildTool,
+	astGrepTool *astgrep.Tool,
+	buildTool *build.Tool,
 	fetchTool *dependencies.FetchTool,
 	listTool *dependencies.ListTool,
 	execTool *exec.Tool,
-	formatTool *format.FormatTool,
+	formatTool *format.Tool,
 	gitCommandTool *git.CommandTool,
 	gitCommitTool *git.CommitTool,
 	lintTool *lint.Tool,
 	testTool *test.Tool,
-	queryTool *query.QueryTool,
+	queryTool *query.Tool,
 	fsFetchTool *fs.FetchTool,
 	fsGrepTool *fs.GrepTool,
 	fsListTool *fs.ListTool,

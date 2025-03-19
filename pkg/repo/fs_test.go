@@ -128,7 +128,7 @@ func TestFilteredFS_UTF8Validation(t *testing.T) {
 
 	// Test directory walking
 	var visitedPaths []string
-	err = fs.WalkDir(filteredFS, ".", func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(filteredFS, ".", func(path string, _ fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -306,7 +306,7 @@ func TestFilteredFS_WalkDir(t *testing.T) {
 
 	// Walk the directory tree
 	visitedPaths := make(map[string]bool)
-	err = fs.WalkDir(filteredFS, ".", func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(filteredFS, ".", func(path string, _ fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

@@ -49,7 +49,7 @@ func (t *FetchTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the fetch operation
-func (t *FetchTool) Execute(ctx context.Context, input FetchInput) (FetchOutput, error) {
+func (t *FetchTool) Execute(_ context.Context, input FetchInput) (FetchOutput, error) {
 	log.Debug("Starting fetch operation", zap.String("path", input.Path))
 
 	// Read the file

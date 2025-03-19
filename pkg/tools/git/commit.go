@@ -28,7 +28,7 @@ type CommitOutput struct {
 
 // CommitTool implements the git commit tool
 type CommitTool struct {
-	RepoFS *repo.RepoFS
+	RepoFS *repo.RepositoryFS
 }
 
 var ProvideCommitTool = wire.Struct(new(CommitTool), "*")
@@ -49,7 +49,7 @@ func (t *CommitTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the git commit operation
-func (t *CommitTool) Execute(ctx context.Context, input CommitInput) (CommitOutput, error) {
+func (t *CommitTool) Execute(_ context.Context, input CommitInput) (CommitOutput, error) {
 	log.Info("Starting git commit operation", zap.String("message", input.Message))
 
 	cfg := &Config{

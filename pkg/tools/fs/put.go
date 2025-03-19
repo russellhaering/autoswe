@@ -47,7 +47,7 @@ func (t *PutTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the put operation
-func (t *PutTool) Execute(ctx context.Context, input PutInput) (PutOutput, error) {
+func (t *PutTool) Execute(_ context.Context, input PutInput) (PutOutput, error) {
 	log.Debug("Starting put operation",
 		zap.String("path", input.Path),
 		zap.Int("contentLength", len(input.Content)))

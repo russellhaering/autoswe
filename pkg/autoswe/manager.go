@@ -60,11 +60,11 @@ func ProvideAnthropic(_ context.Context, anthropicAPIKey AnthropicAPIKey) *anthr
 	)
 }
 
-func ProvideRepoFS(rootDir RootDir) *repo.RepoFS {
+func ProvideRepoFS(rootDir RootDir) *repo.RepositoryFS {
 	return repo.NewRepoFS(string(rootDir))
 }
 
-func ProvideFilteredFS(_ context.Context, rfs *repo.RepoFS) (repo.FilteredFS, error) {
+func ProvideFilteredFS(_ context.Context, rfs *repo.RepositoryFS) (repo.FilteredFS, error) {
 	return rfs.Filter()
 }
 
@@ -97,7 +97,7 @@ type Config struct {
 type Manager struct {
 	GeminiClient    *genai.Client
 	AnthropicClient *anthropic.Client
-	RepoFS          *repo.RepoFS
+	RepoFS          *repo.RepositoryFS
 	FilteredFS      repo.FilteredFS
 	Indexer         *index.Indexer
 	ToolRegistry    *registry.ToolRegistry

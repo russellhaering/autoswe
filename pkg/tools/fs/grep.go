@@ -62,7 +62,7 @@ func (t *GrepTool) Schema() *jsonschema.Schema {
 }
 
 // Execute implements the grep operation
-func (t *GrepTool) Execute(ctx context.Context, input GrepInput) (GrepOutput, error) {
+func (t *GrepTool) Execute(_ context.Context, input GrepInput) (GrepOutput, error) {
 	log.Info("Starting grep operation", zap.String("pattern", input.Pattern))
 
 	if input.Pattern == "" {
