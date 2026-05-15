@@ -18,6 +18,7 @@ import (
 	"github.com/russellhaering/autoswe/pkg/llm/anthropic"
 	"github.com/russellhaering/autoswe/pkg/llm/bedrock"
 	"github.com/russellhaering/autoswe/pkg/llm/openai"
+	"github.com/russellhaering/autoswe/pkg/mcp"
 	"github.com/russellhaering/autoswe/pkg/permissions"
 	"github.com/russellhaering/autoswe/pkg/tools"
 	"github.com/russellhaering/autoswe/pkg/tools/builtins"
@@ -89,6 +90,14 @@ func run() error {
 		}
 	}
 
+	if opts.mcpConfig != "" {
+		idx, err := loadMCP(ctx, opts.mcpConfig, registry)
+		if err != nil {
+			return err
+		}
+		defer idx.Close()
+	}
+
 	policy := buildPolicy(opts, registry)
 
 	a, err := agent.New(agent.Options{
@@ -125,7 +134,7 @@ func parseFlags() cliOptions {
 
 	flag.BoolVar(&o.plan, "plan", false, "(reserved for Phase 4) restrict to read-only tools and emit a structured plan")
 	flag.StringVar(&o.resume, "resume", "", "(reserved for Phase 5) resume a prior session by id")
-	flag.StringVar(&o.mcpConfig, "mcp-config", "", "(reserved for Phase 3) path to MCP server config")
+	flag.StringVar(&o.mcpConfig, "mcp-config", "", "path to an MCP server config JSON file (mcpServers map)")
 
 	flag.Parse()
 	return o
@@ -137,8 +146,6 @@ func rejectUnimplemented(o cliOptions) error {
 		return errors.New("--plan is not yet implemented (Phase 4)")
 	case o.resume != "":
 		return errors.New("--resume is not yet implemented (Phase 5)")
-	case o.mcpConfig != "":
-		return errors.New("--mcp-config is not yet implemented (Phase 3)")
 	}
 	return nil
 }
@@ -249,6 +256,24 @@ func (e effectDenyPolicy) Check(_ context.Context, call permissions.ToolCall) (p
 		}
 	}
 	return permissions.Decision{Action: permissions.Allow}, nil
+}
+
+// loadMCP reads the MCP server config at path, builds the cross-server tool
+// index, and registers a tool_search meta-tool into reg. Returns the index so
+// the caller can Close() it on shutdown.
+func loadMCP(ctx context.Context, path string, reg *tools.Registry) (*mcp.Index, error) {
+	cfg, err := mcp.LoadConfigFile(path)
+	if err != nil {
+		return nil, err
+	}
+	idx, idxErr := mcp.NewIndex(ctx, cfg, true)
+	if idxErr != nil {
+		slog.WarnContext(ctx, "mcp partial init", "err", idxErr)
+	}
+	if err := reg.Register(mcp.NewToolSearch(idx, reg)); err != nil {
+		return nil, fmt.Errorf("register tool_search: %w", err)
+	}
+	return idx, nil
 }
 
 func splitCSV(s string) []string {
