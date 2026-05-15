@@ -20,6 +20,8 @@ import (
 	"github.com/russellhaering/autoswe/pkg/llm/openai"
 	"github.com/russellhaering/autoswe/pkg/mcp"
 	"github.com/russellhaering/autoswe/pkg/permissions"
+	"github.com/russellhaering/autoswe/pkg/planmode"
+	"github.com/russellhaering/autoswe/pkg/skills"
 	"github.com/russellhaering/autoswe/pkg/tools"
 	"github.com/russellhaering/autoswe/pkg/tools/builtins"
 )
@@ -81,13 +83,32 @@ func run() error {
 		return err
 	}
 
-	registry := builtins.DefaultRegistry()
+	var registry *tools.Registry
+	system := opts.system
+	if opts.plan {
+		registry = planmode.Registry()
+		system += planmode.SystemPromptAddition
+	} else {
+		registry = builtins.DefaultRegistry()
+	}
+
 	if opts.allowedTools != "" {
 		names := splitCSV(opts.allowedTools)
 		registry = registry.Filter(names...)
 		if len(registry.Names()) == 0 {
 			return fmt.Errorf("no built-in tools matched --allowed-tools=%q", opts.allowedTools)
 		}
+	}
+
+	loadedSkills, err := skills.Load(skills.DefaultDirs())
+	if err != nil {
+		return err
+	}
+	if len(loadedSkills) > 0 {
+		if err := registry.Register(skills.NewTool(loadedSkills)); err != nil {
+			return err
+		}
+		system += skills.SystemPromptAddition(loadedSkills)
 	}
 
 	if opts.mcpConfig != "" {
@@ -103,7 +124,7 @@ func run() error {
 	a, err := agent.New(agent.Options{
 		Provider: provider,
 		Model:    model,
-		System:   opts.system,
+		System:   system,
 		Tools:    registry,
 		Policy:   policy,
 		MaxTurns: opts.maxTurns,
@@ -132,7 +153,7 @@ func parseFlags() cliOptions {
 	flag.BoolVar(&o.jsonOutput, "json", false, "emit JSONL event stream on stdout instead of plain text")
 	flag.StringVar(&o.logLevel, "log-level", "info", "log level: debug, info, warn, error")
 
-	flag.BoolVar(&o.plan, "plan", false, "(reserved for Phase 4) restrict to read-only tools and emit a structured plan")
+	flag.BoolVar(&o.plan, "plan", false, "plan mode: restrict to read-only tools; exit_plan_mode submits a structured plan")
 	flag.StringVar(&o.resume, "resume", "", "(reserved for Phase 5) resume a prior session by id")
 	flag.StringVar(&o.mcpConfig, "mcp-config", "", "path to an MCP server config JSON file (mcpServers map)")
 
@@ -141,10 +162,7 @@ func parseFlags() cliOptions {
 }
 
 func rejectUnimplemented(o cliOptions) error {
-	switch {
-	case o.plan:
-		return errors.New("--plan is not yet implemented (Phase 4)")
-	case o.resume != "":
+	if o.resume != "" {
 		return errors.New("--resume is not yet implemented (Phase 5)")
 	}
 	return nil

@@ -44,10 +44,16 @@ func (e Effect) String() string {
 // Result is what a tool returns to the agent. Content is the text surfaced to
 // the model in the tool_result block; IsError flips the is_error flag (for
 // Anthropic) or signals an error result to other providers.
+//
+// ExitAfter signals the agent loop to terminate after this turn's tool
+// results are appended to the conversation — used by plan mode's
+// exit_plan_mode tool. The terminating tool's tool_result is still appended;
+// the loop simply does not call the provider again.
 type Result struct {
-	Content  string
-	IsError  bool
-	Metadata json.RawMessage
+	Content   string
+	IsError   bool
+	Metadata  json.RawMessage
+	ExitAfter bool
 }
 
 // Tool is implemented by every built-in tool and by MCP/source-adapter wrappers.

@@ -94,42 +94,63 @@ func (a *Agent) run(ctx context.Context, input string, emit func(Event)) (Result
 			}, nil
 		}
 
-		results, err := a.dispatch(ctx, toolUses, emit)
+		outputs, err := a.dispatch(ctx, toolUses, emit)
 		if err != nil {
 			return Result{Messages: messages, Usage: totalUsage}, err
 		}
-		userContent := make([]llm.ContentBlock, 0, len(results))
-		for _, r := range results {
-			userContent = append(userContent, r)
+		userContent := make([]llm.ContentBlock, 0, len(outputs))
+		exit := false
+		for _, o := range outputs {
+			userContent = append(userContent, o.Block)
+			if o.ExitAfter {
+				exit = true
+			}
 		}
 		messages = append(messages, llm.Message{Role: llm.RoleUser, Content: userContent})
+
+		if exit {
+			emit(Stop{Reason: llm.StopReason("plan_submitted"), Usage: totalUsage})
+			return Result{
+				Stop:     llm.StopReason("plan_submitted"),
+				Usage:    totalUsage,
+				Messages: messages,
+			}, nil
+		}
 	}
 }
 
-func (a *Agent) dispatch(ctx context.Context, toolUses []llm.ToolUseBlock, emit func(Event)) ([]llm.ToolResultBlock, error) {
-	results := make([]llm.ToolResultBlock, len(toolUses))
+type dispatchOutput struct {
+	Block     llm.ToolResultBlock
+	ExitAfter bool
+}
+
+func (a *Agent) dispatch(ctx context.Context, toolUses []llm.ToolUseBlock, emit func(Event)) ([]dispatchOutput, error) {
+	outputs := make([]dispatchOutput, len(toolUses))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, tu := range toolUses {
 		g.Go(func() error {
-			results[i] = a.dispatchOne(gctx, tu, emit)
+			outputs[i] = a.dispatchOne(gctx, tu, emit)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	return results, nil
+	return outputs, nil
 }
 
-func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(Event)) llm.ToolResultBlock {
-	makeResult := func(content string, isError bool) llm.ToolResultBlock {
+func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(Event)) dispatchOutput {
+	makeOutput := func(content string, isError, exit bool) dispatchOutput {
 		emit(ToolResult{ToolUseID: tu.ID, Name: tu.Name, Content: content, IsError: isError})
-		return llm.ToolResultBlock{ToolUseID: tu.ID, Content: content, IsError: isError}
+		return dispatchOutput{
+			Block:     llm.ToolResultBlock{ToolUseID: tu.ID, Content: content, IsError: isError},
+			ExitAfter: exit,
+		}
 	}
 
 	tool, ok := a.opts.Tools.Get(tu.Name)
 	if !ok {
-		return makeResult(fmt.Sprintf("tool %q not found", tu.Name), true)
+		return makeOutput(fmt.Sprintf("tool %q not found", tu.Name), true, false)
 	}
 
 	decision, err := a.opts.Policy.Check(ctx, permissions.ToolCall{
@@ -138,7 +159,7 @@ func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(
 		Tool: tool,
 	})
 	if err != nil {
-		return makeResult(fmt.Sprintf("policy error: %v", err), true)
+		return makeOutput(fmt.Sprintf("policy error: %v", err), true, false)
 	}
 
 	args := tu.Input
@@ -149,7 +170,7 @@ func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(
 			reason = "denied by policy"
 		}
 		a.opts.Logger.InfoContext(ctx, "tool denied", "tool", tu.Name, "reason", reason)
-		return makeResult(reason, true)
+		return makeOutput(reason, true, false)
 	case permissions.Modify:
 		if len(decision.ModifiedArgs) > 0 {
 			args = decision.ModifiedArgs
@@ -159,7 +180,7 @@ func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(
 
 	res, err := tool.Run(ctx, args)
 	if err != nil {
-		return makeResult(fmt.Sprintf("tool error: %v", err), true)
+		return makeOutput(fmt.Sprintf("tool error: %v", err), true, false)
 	}
-	return makeResult(res.Content, res.IsError)
+	return makeOutput(res.Content, res.IsError, res.ExitAfter)
 }
