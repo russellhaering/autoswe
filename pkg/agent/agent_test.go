@@ -151,7 +151,8 @@ func TestRunDenyPolicySurfacesReason(t *testing.T) {
 	a := newAgent(t, p, reg, permissions.AllowReadOnly{})
 
 	var sawReason string
-	for ev := range a.RunStream(context.Background(), "do it") {
+	events, _ := a.RunStream(context.Background(), "do it")
+	for ev := range events {
 		if r, ok := ev.(ToolResult); ok && r.ToolUseID == "tu" {
 			sawReason = r.Content
 			if !r.IsError {
@@ -256,4 +257,116 @@ type policyFunc func(context.Context, permissions.ToolCall) (permissions.Decisio
 
 func (f policyFunc) Check(ctx context.Context, c permissions.ToolCall) (permissions.Decision, error) {
 	return f(ctx, c)
+}
+
+func TestInitialMessagesResumedConversation(t *testing.T) {
+	p := &stubProvider{streams: [][]llm.Event{{
+		llm.TextDelta{Text: "ack"},
+		llm.MessageStop{Reason: llm.StopEndTurn},
+	}}}
+	a, _ := New(Options{
+		Provider: p,
+		Model:    "m",
+		Policy:   permissions.AllowAll{},
+		Tools:    tools.NewRegistry(),
+		InitialMessages: []llm.Message{
+			{Role: llm.RoleUser, Content: []llm.ContentBlock{llm.TextBlock{Text: "first"}}},
+			{Role: llm.RoleAssistant, Content: []llm.ContentBlock{llm.TextBlock{Text: "prior"}}},
+		},
+	})
+	res, err := a.Run(context.Background(), "follow-up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2 initial + 1 follow-up user + 1 assistant = 4
+	if len(res.Messages) != 4 {
+		t.Fatalf("want 4 messages, got %d: %+v", len(res.Messages), res.Messages)
+	}
+	if tb, ok := res.Messages[0].Content[0].(llm.TextBlock); !ok || tb.Text != "first" {
+		t.Fatalf("initial message not preserved at index 0: %+v", res.Messages[0])
+	}
+}
+
+func TestPreToolHookModifiesArgs(t *testing.T) {
+	tool := &stubTool{name: "x", effects: []tools.Effect{tools.EffectReadOnly}, result: tools.Result{Content: "done"}}
+	reg := tools.NewRegistry()
+	_ = reg.Register(tool)
+
+	p := &stubProvider{streams: [][]llm.Event{
+		{
+			llm.ToolUseStop{ID: "tu", Name: "x", Input: json.RawMessage(`{"v":1}`)},
+			llm.MessageStop{Reason: llm.StopToolUse},
+		},
+		{
+			llm.TextDelta{Text: "ok"},
+			llm.MessageStop{Reason: llm.StopEndTurn},
+		},
+	}}
+	a, _ := New(Options{
+		Provider: p, Model: "m", Tools: reg, Policy: permissions.AllowAll{},
+		PreToolHook: func(_ context.Context, c permissions.ToolCall) (permissions.ToolCall, error) {
+			c.Args = json.RawMessage(`{"v":99}`)
+			return c, nil
+		},
+	})
+	if _, err := a.Run(context.Background(), "go"); err != nil {
+		t.Fatal(err)
+	}
+	if len(tool.calls) != 1 || string(tool.calls[0]) != `{"v":99}` {
+		t.Fatalf("tool received %v, want pre-hook-modified args", tool.calls)
+	}
+}
+
+func TestPostToolHookTransformsResult(t *testing.T) {
+	tool := &stubTool{name: "x", effects: []tools.Effect{tools.EffectReadOnly}, result: tools.Result{Content: "original"}}
+	reg := tools.NewRegistry()
+	_ = reg.Register(tool)
+
+	p := &stubProvider{streams: [][]llm.Event{
+		{
+			llm.ToolUseStop{ID: "tu", Name: "x", Input: json.RawMessage(`{}`)},
+			llm.MessageStop{Reason: llm.StopToolUse},
+		},
+		{
+			llm.TextDelta{Text: "ok"},
+			llm.MessageStop{Reason: llm.StopEndTurn},
+		},
+	}}
+	a, _ := New(Options{
+		Provider: p, Model: "m", Tools: reg, Policy: permissions.AllowAll{},
+		PostToolHook: func(_ context.Context, _ permissions.ToolCall, r tools.Result) tools.Result {
+			r.Content = "redacted"
+			return r
+		},
+	})
+	res, err := a.Run(context.Background(), "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// turn-2 user message holds the tool_result block.
+	tr, ok := res.Messages[2].Content[0].(llm.ToolResultBlock)
+	if !ok || tr.Content != "redacted" {
+		t.Fatalf("post-hook didn't transform: %+v", res.Messages[2].Content[0])
+	}
+}
+
+func TestExitAfterStopsLoop(t *testing.T) {
+	tool := &stubTool{name: "exit", effects: []tools.Effect{tools.EffectReadOnly}, result: tools.Result{Content: "submitted", ExitAfter: true}}
+	reg := tools.NewRegistry()
+	_ = reg.Register(tool)
+
+	// Only one provider stream — if the agent loops again it will hit a
+	// "no streams left" error.
+	p := &stubProvider{streams: [][]llm.Event{{
+		llm.ToolUseStop{ID: "tu", Name: "exit", Input: json.RawMessage(`{}`)},
+		llm.MessageStop{Reason: llm.StopToolUse},
+	}}}
+	a, _ := New(Options{Provider: p, Model: "m", Tools: reg, Policy: permissions.AllowAll{}, MaxTurns: 5})
+	res, err := a.Run(context.Background(), "go")
+	if err != nil {
+		t.Fatalf("ExitAfter should terminate cleanly, got %v", err)
+	}
+	if res.Stop != llm.StopReason("plan_submitted") {
+		t.Fatalf("stop = %v, want plan_submitted", res.Stop)
+	}
 }

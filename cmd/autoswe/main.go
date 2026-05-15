@@ -21,6 +21,7 @@ import (
 	"github.com/russellhaering/autoswe/pkg/mcp"
 	"github.com/russellhaering/autoswe/pkg/permissions"
 	"github.com/russellhaering/autoswe/pkg/planmode"
+	"github.com/russellhaering/autoswe/pkg/session"
 	"github.com/russellhaering/autoswe/pkg/skills"
 	"github.com/russellhaering/autoswe/pkg/tools"
 	"github.com/russellhaering/autoswe/pkg/tools/builtins"
@@ -38,6 +39,7 @@ type cliOptions struct {
 	allowedTools string
 	denyWrite    bool
 	denyExec     bool
+	interactive  bool
 	maxTurns     int
 	jsonOutput   bool
 	logLevel     string
@@ -121,23 +123,52 @@ func run() error {
 
 	policy := buildPolicy(opts, registry)
 
+	sessionDir, err := session.DefaultDir()
+	if err != nil {
+		return err
+	}
+	sessionID := opts.resume
+	var initial []llm.Message
+	if sessionID != "" {
+		s, err := session.Load(sessionDir, sessionID)
+		if err != nil {
+			return err
+		}
+		initial = s.Messages
+		slog.InfoContext(ctx, "resumed session", "id", sessionID, "messages", len(initial))
+	} else {
+		sessionID = session.NewID()
+	}
+
 	a, err := agent.New(agent.Options{
-		Provider: provider,
-		Model:    model,
-		System:   system,
-		Tools:    registry,
-		Policy:   policy,
-		MaxTurns: opts.maxTurns,
+		Provider:        provider,
+		Model:           model,
+		System:          system,
+		Tools:           registry,
+		Policy:          policy,
+		MaxTurns:        opts.maxTurns,
+		InitialMessages: initial,
 	})
 	if err != nil {
 		return err
 	}
 
-	events := a.RunStream(ctx, input)
+	events, result := a.RunStream(ctx, input)
+	var streamErr error
 	if opts.jsonOutput {
-		return streamJSON(events, os.Stdout, os.Stderr)
+		streamErr = streamJSON(events, os.Stdout, os.Stderr)
+	} else {
+		streamErr = streamPlain(events, os.Stdout, os.Stderr)
 	}
-	return streamPlain(events, os.Stdout, os.Stderr)
+
+	if len(result.Messages) > 0 {
+		if err := session.Save(sessionDir, sessionID, result.Messages); err != nil {
+			slog.WarnContext(ctx, "session save failed", "id", sessionID, "err", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "[session %s saved to %s]\n", sessionID, session.PathFor(sessionDir, sessionID))
+		}
+	}
+	return streamErr
 }
 
 func parseFlags() cliOptions {
@@ -149,12 +180,13 @@ func parseFlags() cliOptions {
 	flag.StringVar(&o.allowedTools, "allowed-tools", "", "comma-separated list of built-in tools to enable (default: all)")
 	flag.BoolVar(&o.denyWrite, "deny-write", false, "deny all filesystem-write tools")
 	flag.BoolVar(&o.denyExec, "deny-exec", false, "deny all code-execution tools")
+	flag.BoolVar(&o.interactive, "interactive", false, "prompt on stderr/stdin for every tool call (cached for the session)")
 	flag.IntVar(&o.maxTurns, "max-turns", 50, "max assistant turns before the agent aborts")
 	flag.BoolVar(&o.jsonOutput, "json", false, "emit JSONL event stream on stdout instead of plain text")
 	flag.StringVar(&o.logLevel, "log-level", "info", "log level: debug, info, warn, error")
 
 	flag.BoolVar(&o.plan, "plan", false, "plan mode: restrict to read-only tools; exit_plan_mode submits a structured plan")
-	flag.StringVar(&o.resume, "resume", "", "(reserved for Phase 5) resume a prior session by id")
+	flag.StringVar(&o.resume, "resume", "", "resume a prior session by id (~/.autoswe/sessions/<id>.jsonl)")
 	flag.StringVar(&o.mcpConfig, "mcp-config", "", "path to an MCP server config JSON file (mcpServers map)")
 
 	flag.Parse()
@@ -162,9 +194,6 @@ func parseFlags() cliOptions {
 }
 
 func rejectUnimplemented(o cliOptions) error {
-	if o.resume != "" {
-		return errors.New("--resume is not yet implemented (Phase 5)")
-	}
 	return nil
 }
 
@@ -243,17 +272,26 @@ func selectProvider(ctx context.Context, name, model string) (llm.Provider, stri
 }
 
 func buildPolicy(o cliOptions, _ *tools.Registry) permissions.Policy {
-	if !o.denyWrite && !o.denyExec {
+	var policies []permissions.Policy
+	if o.denyWrite || o.denyExec {
+		denied := map[tools.Effect]struct{}{}
+		if o.denyWrite {
+			denied[tools.EffectFilesystemWrite] = struct{}{}
+		}
+		if o.denyExec {
+			denied[tools.EffectCodeExecution] = struct{}{}
+		}
+		policies = append(policies, effectDenyPolicy{denied: denied})
+	}
+	if o.interactive {
+		policies = append(policies, permissions.NewRemembered(permissions.Interactive{
+			Prompt: permissions.TTYPrompter(os.Stderr, os.Stdin),
+		}))
+	}
+	if len(policies) == 0 {
 		return permissions.AllowAll{}
 	}
-	denied := map[tools.Effect]struct{}{}
-	if o.denyWrite {
-		denied[tools.EffectFilesystemWrite] = struct{}{}
-	}
-	if o.denyExec {
-		denied[tools.EffectCodeExecution] = struct{}{}
-	}
-	return effectDenyPolicy{denied: denied}
+	return permissions.NewChain(policies...)
 }
 
 // effectDenyPolicy denies any tool whose effects intersect the configured set.

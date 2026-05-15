@@ -9,11 +9,20 @@ import (
 
 	"github.com/russellhaering/autoswe/pkg/llm"
 	"github.com/russellhaering/autoswe/pkg/permissions"
+	"github.com/russellhaering/autoswe/pkg/tools"
 )
 
 func (a *Agent) run(ctx context.Context, input string, emit func(Event)) (Result, error) {
-	messages := []llm.Message{
-		{Role: llm.RoleUser, Content: []llm.ContentBlock{llm.TextBlock{Text: input}}},
+	messages := make([]llm.Message, 0, len(a.opts.InitialMessages)+1)
+	messages = append(messages, a.opts.InitialMessages...)
+	if input != "" {
+		messages = append(messages, llm.Message{
+			Role:    llm.RoleUser,
+			Content: []llm.ContentBlock{llm.TextBlock{Text: input}},
+		})
+	}
+	if len(messages) == 0 {
+		return Result{}, fmt.Errorf("agent: no input and no prior messages")
 	}
 	var (
 		totalUsage llm.Usage
@@ -140,29 +149,38 @@ func (a *Agent) dispatch(ctx context.Context, toolUses []llm.ToolUseBlock, emit 
 }
 
 func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(Event)) dispatchOutput {
-	makeOutput := func(content string, isError, exit bool) dispatchOutput {
-		emit(ToolResult{ToolUseID: tu.ID, Name: tu.Name, Content: content, IsError: isError})
+	finalize := func(call permissions.ToolCall, res tools.Result) dispatchOutput {
+		if a.opts.PostToolHook != nil {
+			res = a.opts.PostToolHook(ctx, call, res)
+		}
+		emit(ToolResult{ToolUseID: tu.ID, Name: tu.Name, Content: res.Content, IsError: res.IsError})
 		return dispatchOutput{
-			Block:     llm.ToolResultBlock{ToolUseID: tu.ID, Content: content, IsError: isError},
-			ExitAfter: exit,
+			Block:     llm.ToolResultBlock{ToolUseID: tu.ID, Content: res.Content, IsError: res.IsError},
+			ExitAfter: res.ExitAfter,
 		}
 	}
 
 	tool, ok := a.opts.Tools.Get(tu.Name)
+	call := permissions.ToolCall{Name: tu.Name, Args: tu.Input, Tool: tool}
+
+	if a.opts.PreToolHook != nil {
+		modified, err := a.opts.PreToolHook(ctx, call)
+		if err != nil {
+			return finalize(call, tools.Result{IsError: true, Content: fmt.Sprintf("pre-tool hook: %v", err)})
+		}
+		call = modified
+	}
+
 	if !ok {
-		return makeOutput(fmt.Sprintf("tool %q not found", tu.Name), true, false)
+		return finalize(call, tools.Result{IsError: true, Content: fmt.Sprintf("tool %q not found", tu.Name)})
 	}
 
-	decision, err := a.opts.Policy.Check(ctx, permissions.ToolCall{
-		Name: tu.Name,
-		Args: tu.Input,
-		Tool: tool,
-	})
+	decision, err := a.opts.Policy.Check(ctx, call)
 	if err != nil {
-		return makeOutput(fmt.Sprintf("policy error: %v", err), true, false)
+		return finalize(call, tools.Result{IsError: true, Content: fmt.Sprintf("policy error: %v", err)})
 	}
 
-	args := tu.Input
+	args := call.Args
 	switch decision.Action {
 	case permissions.Deny:
 		reason := decision.Reason
@@ -170,7 +188,7 @@ func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(
 			reason = "denied by policy"
 		}
 		a.opts.Logger.InfoContext(ctx, "tool denied", "tool", tu.Name, "reason", reason)
-		return makeOutput(reason, true, false)
+		return finalize(call, tools.Result{IsError: true, Content: reason})
 	case permissions.Modify:
 		if len(decision.ModifiedArgs) > 0 {
 			args = decision.ModifiedArgs
@@ -180,7 +198,7 @@ func (a *Agent) dispatchOne(ctx context.Context, tu llm.ToolUseBlock, emit func(
 
 	res, err := tool.Run(ctx, args)
 	if err != nil {
-		return makeOutput(fmt.Sprintf("tool error: %v", err), true, false)
+		return finalize(call, tools.Result{IsError: true, Content: fmt.Sprintf("tool error: %v", err)})
 	}
-	return makeOutput(res.Content, res.IsError, res.ExitAfter)
+	return finalize(call, res)
 }

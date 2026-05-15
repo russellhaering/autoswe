@@ -26,6 +26,20 @@ type Options struct {
 	MaxTokens   int     // per-call cap; defaults to 4096
 	Temperature float64 // 0 = unset
 	Logger      *slog.Logger
+
+	// InitialMessages, if set, is prepended to the conversation history
+	// before the user's input. Used by --resume to continue a prior session.
+	InitialMessages []llm.Message
+
+	// PreToolHook is invoked once per tool call before policy + execution.
+	// It may return an error to abort the run, or a possibly-modified
+	// ToolCall whose Args are used downstream.
+	PreToolHook func(ctx context.Context, call permissions.ToolCall) (permissions.ToolCall, error)
+	// PostToolHook is invoked once per tool call after execution (or after a
+	// synthetic deny result), with the final Result for inspection or
+	// transformation. It may not abort the run; errors from it are logged
+	// but otherwise ignored.
+	PostToolHook func(ctx context.Context, call permissions.ToolCall, result tools.Result) tools.Result
 }
 
 type Agent struct {
@@ -116,10 +130,12 @@ func (a *Agent) Run(ctx context.Context, input string) (Result, error) {
 	return a.run(ctx, input, func(Event) {})
 }
 
-// RunStream drives the loop and emits events as they happen. The channel is
-// closed when the loop returns.
-func (a *Agent) RunStream(ctx context.Context, input string) <-chan Event {
+// RunStream drives the loop and emits events as they happen. The returned
+// *Result is populated by the time the events channel closes; callers must
+// drain the channel before reading it.
+func (a *Agent) RunStream(ctx context.Context, input string) (<-chan Event, *Result) {
 	ch := make(chan Event, 16)
+	result := &Result{}
 	go func() {
 		defer close(ch)
 		emit := func(ev Event) {
@@ -128,9 +144,11 @@ func (a *Agent) RunStream(ctx context.Context, input string) <-chan Event {
 			case ch <- ev:
 			}
 		}
-		if _, err := a.run(ctx, input, emit); err != nil {
+		r, err := a.run(ctx, input, emit)
+		*result = r
+		if err != nil {
 			emit(Error{Err: err})
 		}
 	}()
-	return ch
+	return ch, result
 }

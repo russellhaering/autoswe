@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.6
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	golang.org/x/sync v0.20.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -26,5 +27,4 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1 // indirect
 	github.com/aws/smithy-go v1.25.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

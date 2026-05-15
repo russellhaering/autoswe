@@ -43,10 +43,16 @@ func (a DecisionAction) String() string {
 // args passed to the tool; the assistant message in conversation history still
 // shows the model's original input. On Deny, Reason is surfaced to the model
 // as the tool_result text so it can recover.
+//
+// Remember is a hint to a wrapping cache (Remembered) that the decision
+// should be cached for future calls to the same tool name. Inner policies set
+// it (e.g. an Interactive prompt when the user picks "always allow"); caching
+// policies act on it.
 type Decision struct {
 	Action       DecisionAction
 	ModifiedArgs json.RawMessage
 	Reason       string
+	Remember     bool
 }
 
 type Policy interface {
