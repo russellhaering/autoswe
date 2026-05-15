@@ -1,0 +1,6 @@
+/autoswe
+/.autoswe/
+
+.idea/
+.vscode/
+*.swp
