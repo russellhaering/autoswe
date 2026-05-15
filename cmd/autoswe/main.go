@@ -16,6 +16,7 @@ import (
 	"github.com/russellhaering/autoswe/pkg/agent"
 	"github.com/russellhaering/autoswe/pkg/llm"
 	"github.com/russellhaering/autoswe/pkg/llm/anthropic"
+	"github.com/russellhaering/autoswe/pkg/llm/bedrock"
 	"github.com/russellhaering/autoswe/pkg/llm/openai"
 	"github.com/russellhaering/autoswe/pkg/permissions"
 	"github.com/russellhaering/autoswe/pkg/tools"
@@ -74,7 +75,7 @@ func run() error {
 		return errors.New("no prompt provided (use -p or pipe via stdin)")
 	}
 
-	provider, model, err := selectProvider(opts.provider, opts.model)
+	provider, model, err := selectProvider(ctx, opts.provider, opts.model)
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func run() error {
 func parseFlags() cliOptions {
 	var o cliOptions
 	flag.StringVar(&o.prompt, "p", "", "one-shot prompt; if empty and stdin is piped, the prompt is read from stdin")
-	flag.StringVar(&o.provider, "provider", "anthropic", "LLM provider: anthropic or openai")
+	flag.StringVar(&o.provider, "provider", "anthropic", "LLM provider: anthropic, openai, or bedrock")
 	flag.StringVar(&o.model, "model", "", "model id (defaults to a provider-specific Sonnet/GPT-5 model if unset)")
 	flag.StringVar(&o.system, "system", defaultSystemPrompt, "system prompt")
 	flag.StringVar(&o.allowedTools, "allowed-tools", "", "comma-separated list of built-in tools to enable (default: all)")
@@ -175,7 +176,7 @@ func parseLogLevel(s string) (slog.Level, error) {
 	}
 }
 
-func selectProvider(name, model string) (llm.Provider, string, error) {
+func selectProvider(ctx context.Context, name, model string) (llm.Provider, string, error) {
 	switch name {
 	case "anthropic":
 		key := os.Getenv("ANTHROPIC_API_KEY")
@@ -199,8 +200,20 @@ func selectProvider(name, model string) (llm.Provider, string, error) {
 			Organization: os.Getenv("OPENAI_ORG_ID"),
 			Project:      os.Getenv("OPENAI_PROJECT_ID"),
 		}), model, nil
+	case "bedrock":
+		if model == "" {
+			model = bedrock.DefaultModel
+		}
+		p, err := bedrock.New(ctx, bedrock.Config{
+			Region:  os.Getenv("AWS_REGION"),
+			Profile: os.Getenv("AWS_PROFILE"),
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		return p, model, nil
 	default:
-		return nil, "", fmt.Errorf("unknown provider %q (want anthropic or openai)", name)
+		return nil, "", fmt.Errorf("unknown provider %q (want anthropic, openai, or bedrock)", name)
 	}
 }
 
