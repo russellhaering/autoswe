@@ -10,9 +10,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
+	"golang.org/x/term"
+
+	"github.com/russellhaering/autoswe/internal/tui"
 	"github.com/russellhaering/autoswe/pkg/agent"
 	"github.com/russellhaering/autoswe/pkg/llm"
 	"github.com/russellhaering/autoswe/pkg/llm/anthropic"
@@ -67,18 +71,21 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	input, err := readInput(opts.prompt)
+	input, tuiMode, err := readInput(opts.prompt)
 	if err != nil {
 		return err
 	}
-	if input == "" {
-		return errors.New("no prompt provided (use -p or pipe via stdin)")
+
+	logTarget, logCleanup, err := openLogTarget(tuiMode, opts.resume)
+	if err != nil {
+		return err
 	}
+	defer logCleanup()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logTarget, &slog.HandlerOptions{Level: level})))
 
 	provider, model, err := selectProvider(ctx, opts.provider, opts.model)
 	if err != nil {
@@ -140,7 +147,7 @@ func run() error {
 		sessionID = session.NewID()
 	}
 
-	a, err := agent.New(agent.Options{
+	agentOpts := agent.Options{
 		Provider:        provider,
 		Model:           model,
 		System:          system,
@@ -148,7 +155,17 @@ func run() error {
 		Policy:          policy,
 		MaxTurns:        opts.maxTurns,
 		InitialMessages: initial,
-	})
+	}
+
+	if tuiMode {
+		return tui.Run(ctx, tui.Config{
+			AgentOptions: agentOpts,
+			SessionDir:   sessionDir,
+			SessionID:    sessionID,
+		})
+	}
+
+	a, err := agent.New(agentOpts)
 	if err != nil {
 		return err
 	}
@@ -169,6 +186,32 @@ func run() error {
 		}
 	}
 	return streamErr
+}
+
+// openLogTarget picks where slog output goes. In TUI mode it writes to
+// ~/.autoswe/logs/<session>.log so the alt-screen UI isn't trashed; in
+// CLI mode it stays on stderr.
+func openLogTarget(tuiMode bool, sessionHint string) (io.Writer, func(), error) {
+	if !tuiMode {
+		return os.Stderr, func() {}, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return io.Discard, func() {}, nil
+	}
+	dir := filepath.Join(home, ".autoswe", "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return io.Discard, func() {}, nil
+	}
+	name := sessionHint
+	if name == "" {
+		name = "tui"
+	}
+	f, err := os.OpenFile(filepath.Join(dir, name+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return io.Discard, func() {}, nil
+	}
+	return f, func() { _ = f.Close() }, nil
 }
 
 func parseFlags() cliOptions {
@@ -197,22 +240,30 @@ func rejectUnimplemented(o cliOptions) error {
 	return nil
 }
 
-func readInput(prompt string) (string, error) {
+// readInput resolves the one-shot prompt. It returns tuiMode=true only when
+// -p is unset and both stdin and stdout are TTYs — meaning the user invoked
+// autoswe interactively. Piped stdin is read as the prompt; an empty pipe
+// (or no input + redirected stdio) is a usage error rather than a TUI launch.
+func readInput(prompt string) (string, bool, error) {
 	if prompt != "" {
-		return prompt, nil
+		return prompt, false, nil
 	}
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return "", fmt.Errorf("stat stdin: %w", err)
+	stdinTTY := term.IsTerminal(int(os.Stdin.Fd()))
+	stdoutTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	if stdinTTY && stdoutTTY {
+		return "", true, nil
 	}
-	if info.Mode()&os.ModeCharDevice != 0 {
-		return "", nil
+	if !stdinTTY {
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", false, fmt.Errorf("read stdin: %w", err)
+		}
+		s := strings.TrimRight(string(b), "\n")
+		if s != "" {
+			return s, false, nil
+		}
 	}
-	b, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return "", fmt.Errorf("read stdin: %w", err)
-	}
-	return strings.TrimRight(string(b), "\n"), nil
+	return "", false, errors.New("no prompt provided (use -p, pipe via stdin, or invoke without args in a terminal for the TUI)")
 }
 
 func parseLogLevel(s string) (slog.Level, error) {
