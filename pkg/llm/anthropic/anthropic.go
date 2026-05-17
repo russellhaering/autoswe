@@ -17,7 +17,7 @@ import (
 const (
 	defaultBaseURL    = "https://api.anthropic.com"
 	defaultAPIVersion = "2023-06-01"
-	DefaultModel      = "claude-sonnet-4-5"
+	DefaultModel      = "claude-opus-4-20250514"
 )
 
 type Config struct {
