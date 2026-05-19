@@ -13,11 +13,15 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/term"
 
 	"github.com/russellhaering/autoswe/internal/tui"
 	"github.com/russellhaering/autoswe/pkg/agent"
+	"github.com/russellhaering/autoswe/pkg/codemode"
+	"github.com/russellhaering/autoswe/pkg/config"
+	"github.com/russellhaering/autoswe/pkg/secrets"
 	"github.com/russellhaering/autoswe/pkg/llm"
 	"github.com/russellhaering/autoswe/pkg/llm/anthropic"
 	"github.com/russellhaering/autoswe/pkg/llm/bedrock"
@@ -51,9 +55,22 @@ type cliOptions struct {
 	plan      bool
 	resume    string
 	mcpConfig string
+
+	scriptTimeout time.Duration
+	scriptMemMiB  uint
 }
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "login", "logout", "whoami":
+			if err := runSubcommand(os.Args[1], os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -61,7 +78,15 @@ func main() {
 }
 
 func run() error {
-	opts := parseFlags()
+	opts, userSet := parseFlags()
+
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		// Surface as warning but continue with built-in defaults.
+		fmt.Fprintln(os.Stderr, "warning:", cfgErr)
+		cfg = &config.Config{}
+	}
+	applyConfigDefaults(&opts, cfg, userSet)
 
 	if err := rejectUnimplemented(opts); err != nil {
 		return err
@@ -129,6 +154,21 @@ func run() error {
 	}
 
 	policy := buildPolicy(opts, registry)
+
+	// Code-mode is non-optional: the only model-visible tool is run_script,
+	// which exposes everything in `registry` as host functions inside a
+	// QuickJS sandbox. This amortizes chained tool calls into one round-trip
+	// (à la Cloudflare Code Mode / pi.dev ctx_execute) and lets the same
+	// Policy gate every inner call.
+	cm := codemode.New(registry, policy, codemode.Limits{
+		MaxExecution: opts.scriptTimeout,
+		MemoryMiB:    uint64(opts.scriptMemMiB),
+	}, slog.Default())
+	wrapped := tools.NewRegistry()
+	if err := wrapped.Register(cm); err != nil {
+		return fmt.Errorf("register run_script: %w", err)
+	}
+	registry = wrapped
 
 	sessionDir, err := session.DefaultDir()
 	if err != nil {
@@ -214,7 +254,10 @@ func openLogTarget(tuiMode bool, sessionHint string) (io.Writer, func(), error) 
 	return f, func() { _ = f.Close() }, nil
 }
 
-func parseFlags() cliOptions {
+// parseFlags returns the parsed options plus the set of flag names that
+// the user passed explicitly. applyConfigDefaults uses the set so that
+// config-supplied defaults only apply where the user didn't pass a flag.
+func parseFlags() (cliOptions, map[string]bool) {
 	var o cliOptions
 	flag.StringVar(&o.prompt, "p", "", "one-shot prompt; if empty and stdin is piped, the prompt is read from stdin")
 	flag.StringVar(&o.provider, "provider", "anthropic", "LLM provider: anthropic, openai, or bedrock")
@@ -232,12 +275,47 @@ func parseFlags() cliOptions {
 	flag.StringVar(&o.resume, "resume", "", "resume a prior session by id (~/.autoswe/sessions/<id>.jsonl)")
 	flag.StringVar(&o.mcpConfig, "mcp-config", "", "path to an MCP server config JSON file (mcpServers map)")
 
+	flag.DurationVar(&o.scriptTimeout, "script-timeout", codemode.DefaultMaxExecution, "max execution time for a single run_script call")
+	flag.UintVar(&o.scriptMemMiB, "script-mem-mib", codemode.DefaultMemoryMiB, "memory limit for the run_script sandbox, in MiB")
+
 	flag.Parse()
-	return o
+	userSet := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { userSet[f.Name] = true })
+	return o, userSet
 }
 
-func rejectUnimplemented(o cliOptions) error {
+func rejectUnimplemented(_ cliOptions) error {
 	return nil
+}
+
+// applyConfigDefaults overlays config-supplied defaults onto opts wherever
+// the user did not explicitly set that flag. Precedence: explicit flag >
+// config > flag's built-in default (already in opts).
+func applyConfigDefaults(opts *cliOptions, cfg *config.Config, userSet map[string]bool) {
+	if cfg == nil {
+		return
+	}
+	d := cfg.Defaults
+	if !userSet["provider"] && d.Provider != "" {
+		opts.provider = d.Provider
+	}
+	if !userSet["model"] {
+		if p := cfg.ProviderOf(opts.provider).Model; p != "" {
+			opts.model = p
+		}
+	}
+	if !userSet["max-turns"] && d.MaxTurns > 0 {
+		opts.maxTurns = d.MaxTurns
+	}
+	if !userSet["log-level"] && d.LogLevel != "" {
+		opts.logLevel = d.LogLevel
+	}
+	if !userSet["script-timeout"] && d.ScriptTimeout > 0 {
+		opts.scriptTimeout = d.ScriptTimeout
+	}
+	if !userSet["script-mem-mib"] && d.ScriptMemMiB > 0 {
+		opts.scriptMemMiB = d.ScriptMemMiB
+	}
 }
 
 // readInput resolves the one-shot prompt. It returns tuiMode=true only when
@@ -281,21 +359,44 @@ func parseLogLevel(s string) (slog.Level, error) {
 	}
 }
 
+// resolveToken returns the API token for a provider, preferring an env var
+// over the OS keychain so CI/CD workflows are unchanged. Returns ("", nil)
+// on a clean miss; backend errors are surfaced.
+func resolveToken(provider, envVar string) (string, error) {
+	if v := os.Getenv(envVar); v != "" {
+		return v, nil
+	}
+	tok, ok, err := secrets.Get(provider)
+	if err != nil {
+		return "", fmt.Errorf("keychain lookup for %s: %w", provider, err)
+	}
+	if ok {
+		return tok, nil
+	}
+	return "", nil
+}
+
 func selectProvider(ctx context.Context, name, model string) (llm.Provider, string, error) {
 	switch name {
 	case "anthropic":
-		key := os.Getenv("ANTHROPIC_API_KEY")
+		key, err := resolveToken("anthropic", "ANTHROPIC_API_KEY")
+		if err != nil {
+			return nil, "", err
+		}
 		if key == "" {
-			return nil, "", errors.New("ANTHROPIC_API_KEY is required for --provider=anthropic")
+			return nil, "", errors.New("no anthropic API key: set ANTHROPIC_API_KEY or run `autoswe login --provider anthropic`")
 		}
 		if model == "" {
 			model = anthropic.DefaultModel
 		}
 		return anthropic.New(anthropic.Config{APIKey: key}), model, nil
 	case "openai":
-		key := os.Getenv("OPENAI_API_KEY")
+		key, err := resolveToken("openai", "OPENAI_API_KEY")
+		if err != nil {
+			return nil, "", err
+		}
 		if key == "" {
-			return nil, "", errors.New("OPENAI_API_KEY is required for --provider=openai")
+			return nil, "", errors.New("no openai API key: set OPENAI_API_KEY or run `autoswe login --provider openai`")
 		}
 		if model == "" {
 			model = openai.DefaultModel
@@ -409,6 +510,8 @@ func streamPlain(events <-chan agent.Event, stdout, stderr io.Writer) error {
 			} else {
 				_, _ = fmt.Fprintf(stderr, "← %s: %d bytes\n", e.Name, len(e.Content))
 			}
+		case agent.ServerToolUse:
+			_, _ = fmt.Fprintf(stderr, "⟳ %s/%s%s\n", e.Provider, e.Name, summarizeServerInput(e.Raw))
 		case agent.Stop:
 			_, _ = fmt.Fprintln(stdout)
 			_, _ = fmt.Fprintf(stderr, "[stop reason=%s in=%d out=%d]\n", e.Reason, e.Usage.InputTokens, e.Usage.OutputTokens)
@@ -417,6 +520,19 @@ func streamPlain(events <-chan agent.Event, stdout, stderr io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// summarizeServerInput extracts the `input` field from a server_tool_use
+// block so we can show "web_search(query: foo)" rather than the whole
+// raw JSON.
+func summarizeServerInput(raw json.RawMessage) string {
+	var m struct {
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil || len(m.Input) == 0 {
+		return ""
+	}
+	return summarizeArgs(m.Input)
 }
 
 // streamJSON emits one JSON object per line on stdout.
@@ -431,6 +547,8 @@ func streamJSON(events <-chan agent.Event, stdout, _ io.Writer) error {
 			payload = map[string]any{"type": "tool_use", "id": e.ID, "name": e.Name, "input": json.RawMessage(e.Input)}
 		case agent.ToolResult:
 			payload = map[string]any{"type": "tool_result", "id": e.ToolUseID, "name": e.Name, "content": e.Content, "is_error": e.IsError}
+		case agent.ServerToolUse:
+			payload = map[string]any{"type": "server_tool_use", "provider": e.Provider, "name": e.Name, "raw": json.RawMessage(e.Raw)}
 		case agent.Stop:
 			payload = map[string]any{"type": "stop", "reason": string(e.Reason), "usage": map[string]int{"input_tokens": e.Usage.InputTokens, "output_tokens": e.Usage.OutputTokens}}
 		case agent.Error:

@@ -16,6 +16,19 @@ type toolUseAccumulator struct {
 	input strings.Builder
 }
 
+// serverBlockAccumulator captures a complete server-side content block
+// (server_tool_use, web_search_tool_result) so it can be round-tripped
+// verbatim in subsequent turns and surfaced to the loop for visibility.
+type serverBlockAccumulator struct {
+	blockType string
+	name      string // for server_tool_use blocks
+	// startJSON is the content_block JSON from the content_block_start
+	// event (everything except the streamed input for server_tool_use).
+	startJSON json.RawMessage
+	// inputBuf accumulates the partial_json deltas for server_tool_use.
+	inputBuf strings.Builder
+}
+
 // parseStream consumes an Anthropic SSE response body and emits canonical
 // llm.Events. The events channel is always closed on return.
 func parseStream(body io.ReadCloser, events chan<- llm.Event) {
@@ -29,6 +42,7 @@ func parseStream(body io.ReadCloser, events chan<- llm.Event) {
 		eventType string
 		dataLines []string
 		toolAcc   = map[int]*toolUseAccumulator{}
+		serverAcc = map[int]*serverBlockAccumulator{}
 		usage     llm.Usage
 		stopped   bool
 	)
@@ -58,16 +72,35 @@ func parseStream(body io.ReadCloser, events chan<- llm.Event) {
 			}
 		case "content_block_start":
 			var p struct {
-				Index        int `json:"index"`
-				ContentBlock struct {
-					Type string `json:"type"`
-					ID   string `json:"id"`
-					Name string `json:"name"`
-				} `json:"content_block"`
+				Index        int             `json:"index"`
+				ContentBlock json.RawMessage `json:"content_block"`
 			}
-			if err := json.Unmarshal([]byte(data), &p); err == nil && p.ContentBlock.Type == "tool_use" {
-				toolAcc[p.Index] = &toolUseAccumulator{id: p.ContentBlock.ID, name: p.ContentBlock.Name}
-				events <- llm.ToolUseStart{ID: p.ContentBlock.ID, Name: p.ContentBlock.Name}
+			if err := json.Unmarshal([]byte(data), &p); err != nil {
+				return
+			}
+			var meta struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			}
+			_ = json.Unmarshal(p.ContentBlock, &meta)
+			switch meta.Type {
+			case "tool_use":
+				toolAcc[p.Index] = &toolUseAccumulator{id: meta.ID, name: meta.Name}
+				events <- llm.ToolUseStart{ID: meta.ID, Name: meta.Name}
+			case "server_tool_use":
+				// Input streams in via input_json_delta; full JSON assembled on stop.
+				serverAcc[p.Index] = &serverBlockAccumulator{
+					blockType: meta.Type,
+					name:      meta.Name,
+					startJSON: cloneRaw(p.ContentBlock),
+				}
+			case "web_search_tool_result":
+				// Result is fully inlined in the start event — no deltas follow.
+				serverAcc[p.Index] = &serverBlockAccumulator{
+					blockType: meta.Type,
+					startJSON: cloneRaw(p.ContentBlock),
+				}
 			}
 		case "content_block_delta":
 			var p struct {
@@ -88,6 +121,8 @@ func parseStream(body io.ReadCloser, events chan<- llm.Event) {
 				if acc, ok := toolAcc[p.Index]; ok {
 					acc.input.WriteString(p.Delta.PartialJSON)
 					events <- llm.ToolUseDelta{ID: acc.id, PartialJSON: p.Delta.PartialJSON}
+				} else if acc, ok := serverAcc[p.Index]; ok {
+					acc.inputBuf.WriteString(p.Delta.PartialJSON)
 				}
 			}
 		case "content_block_stop":
@@ -102,6 +137,15 @@ func parseStream(body io.ReadCloser, events chan<- llm.Event) {
 					}
 					events <- llm.ToolUseStop{ID: acc.id, Name: acc.name, Input: json.RawMessage(raw)}
 					delete(toolAcc, p.Index)
+				} else if acc, ok := serverAcc[p.Index]; ok {
+					raw := finalizeServerBlock(acc)
+					events <- llm.ServerToolStop{
+						Provider:  ProviderID,
+						BlockType: acc.blockType,
+						Name:      acc.name,
+						Raw:       raw,
+					}
+					delete(serverAcc, p.Index)
 				}
 			}
 		case "message_delta":
@@ -160,4 +204,35 @@ func parseStream(body io.ReadCloser, events chan<- llm.Event) {
 	if !stopped {
 		events <- llm.ErrorEvent{Err: fmt.Errorf("anthropic: stream ended without message_delta stop_reason")}
 	}
+}
+
+func cloneRaw(r json.RawMessage) json.RawMessage {
+	out := make([]byte, len(r))
+	copy(out, r)
+	return out
+}
+
+// finalizeServerBlock returns the full block JSON. For server_tool_use,
+// the streamed input is merged into the start JSON's `input` field. For
+// web_search_tool_result the start JSON is already complete.
+func finalizeServerBlock(acc *serverBlockAccumulator) json.RawMessage {
+	if acc.blockType != "server_tool_use" || acc.inputBuf.Len() == 0 {
+		return acc.startJSON
+	}
+	// Parse start as a generic map, splice in `input`, re-marshal.
+	var m map[string]any
+	if err := json.Unmarshal(acc.startJSON, &m); err != nil {
+		return acc.startJSON
+	}
+	var inp any
+	if err := json.Unmarshal([]byte(acc.inputBuf.String()), &inp); err != nil {
+		// keep as a string if it doesn't parse
+		inp = acc.inputBuf.String()
+	}
+	m["input"] = inp
+	out, err := json.Marshal(m)
+	if err != nil {
+		return acc.startJSON
+	}
+	return out
 }

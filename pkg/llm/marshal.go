@@ -27,6 +27,11 @@ type contentBlockJSON struct {
 
 	// thinking
 	Thinking string `json:"thinking,omitempty"`
+
+	// server_tool — preserves provider-managed blocks verbatim.
+	Provider  string          `json:"_provider,omitempty"`
+	BlockType string          `json:"_block_type,omitempty"`
+	Raw       json.RawMessage `json:"_raw,omitempty"`
 }
 
 // MarshalJSON encodes the message using a stable, type-tagged content-block
@@ -46,6 +51,13 @@ func (m Message) MarshalJSON() ([]byte, error) {
 			out.Content = append(out.Content, contentBlockJSON{Type: "tool_result", ToolUseID: b.ToolUseID, ResultContent: b.Content, IsError: b.IsError})
 		case ThinkingBlock:
 			out.Content = append(out.Content, contentBlockJSON{Type: "thinking", Thinking: b.Thinking})
+		case ServerToolBlock:
+			out.Content = append(out.Content, contentBlockJSON{
+				Type:      "server_tool",
+				Provider:  b.Provider,
+				BlockType: b.BlockType,
+				Raw:       b.Raw,
+			})
 		default:
 			return nil, fmt.Errorf("llm: unknown content block type %T", c)
 		}
@@ -78,6 +90,12 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 			m.Content = append(m.Content, ToolResultBlock{ToolUseID: c.ToolUseID, Content: c.ResultContent, IsError: c.IsError})
 		case "thinking":
 			m.Content = append(m.Content, ThinkingBlock{Thinking: c.Thinking})
+		case "server_tool":
+			m.Content = append(m.Content, ServerToolBlock{
+				Provider:  c.Provider,
+				BlockType: c.BlockType,
+				Raw:       c.Raw,
+			})
 		default:
 			return fmt.Errorf("llm: unknown content block type %q", c.Type)
 		}

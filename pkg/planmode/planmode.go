@@ -17,7 +17,7 @@ import (
 // the plan is ready.
 const SystemPromptAddition = `
 
-You are in PLAN MODE. Do NOT write/edit files, run shell commands, or otherwise modify state — only read, search, and explore. Develop a complete plan, then call the ` + "`exit_plan_mode`" + ` tool with the plan rendered as markdown. Calling exit_plan_mode terminates the session.`
+You are in PLAN MODE. Do NOT write/edit files, run shell commands, or otherwise modify state — only read, search, and explore. Develop a complete plan, then call ` + "`exit_plan_mode({plan: \"...\"})`" + ` from a run_script invocation with the plan rendered as markdown. Calling exit_plan_mode terminates the session.`
 
 // ExitPlanMode is the tool that submits a plan and ends the agent loop.
 type ExitPlanMode struct{}

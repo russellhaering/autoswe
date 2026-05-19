@@ -52,11 +52,12 @@ func (a *Agent) run(ctx context.Context, input string, emit func(Event)) (Result
 		}
 
 		var (
-			turnText  strings.Builder
-			toolUses  []llm.ToolUseBlock
-			turnStop  llm.StopReason
-			turnUsage llm.Usage
-			streamErr error
+			turnText   strings.Builder
+			toolUses   []llm.ToolUseBlock
+			serverBlks []llm.ServerToolBlock
+			turnStop   llm.StopReason
+			turnUsage  llm.Usage
+			streamErr  error
 		)
 
 		for ev := range stream {
@@ -67,6 +68,15 @@ func (a *Agent) run(ctx context.Context, input string, emit func(Event)) (Result
 			case llm.ToolUseStop:
 				toolUses = append(toolUses, llm.ToolUseBlock{ID: e.ID, Name: e.Name, Input: e.Input})
 				emit(ToolUse{ID: e.ID, Name: e.Name, Input: e.Input})
+			case llm.ServerToolStop:
+				serverBlks = append(serverBlks, llm.ServerToolBlock{
+					Provider:  e.Provider,
+					BlockType: e.BlockType,
+					Raw:       e.Raw,
+				})
+				if e.BlockType == "server_tool_use" && e.Name != "" {
+					emit(ServerToolUse{Provider: e.Provider, Name: e.Name, Raw: e.Raw})
+				}
 			case llm.MessageStop:
 				turnStop = e.Reason
 				turnUsage = e.Usage
@@ -85,6 +95,9 @@ func (a *Agent) run(ctx context.Context, input string, emit func(Event)) (Result
 		var content []llm.ContentBlock
 		if turnText.Len() > 0 {
 			content = append(content, llm.TextBlock{Text: turnText.String()})
+		}
+		for _, sb := range serverBlks {
+			content = append(content, sb)
 		}
 		for _, tu := range toolUses {
 			content = append(content, tu)

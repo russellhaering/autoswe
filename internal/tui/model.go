@@ -274,12 +274,28 @@ func (m *model) handleEvent(ev agent.Event) {
 		} else {
 			m.appendLine(toolOKStyle.Render(fmt.Sprintf("← %s (%s)", e.Name, humanBytes(len(e.Content)))))
 		}
+	case agent.ServerToolUse:
+		if m.curTextOpen {
+			m.appendRaw("\n")
+			m.curTextOpen = false
+		}
+		m.appendLine(toolUseStyle.Render("⟳ "+e.Provider+"/"+e.Name) + " " + dimStyle.Render(summarizeServerInput(e.Raw)))
 	case agent.Stop:
 		m.turnUsage = e.Usage
 	case agent.Error:
 		m.statusErr = e.Err.Error()
 		m.appendError(e.Err)
 	}
+}
+
+func summarizeServerInput(raw json.RawMessage) string {
+	var m struct {
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil || len(m.Input) == 0 {
+		return ""
+	}
+	return summarizeArgs(m.Input)
 }
 
 func (m *model) finishStream() tea.Cmd {

@@ -61,6 +61,26 @@ type ThinkingBlock struct {
 
 func (ThinkingBlock) isContentBlock() {}
 
+// ServerToolBlock preserves a provider-managed content block (server-side
+// tool calls executed by the provider, and their results) verbatim so it
+// round-trips through the conversation history. The agent loop does NOT
+// dispatch these — the provider already ran the tool and inlined the
+// result. Anthropic web_search uses this for server_tool_use and
+// web_search_tool_result blocks.
+type ServerToolBlock struct {
+	// Provider identifies which provider produced this block, used by
+	// translators to decide whether to round-trip the raw payload.
+	Provider string
+	// BlockType is the provider's JSON `type` field (e.g.
+	// "server_tool_use", "web_search_tool_result").
+	BlockType string
+	// Raw is the full content block JSON exactly as it appeared in the
+	// provider's response.
+	Raw json.RawMessage
+}
+
+func (ServerToolBlock) isContentBlock() {}
+
 type Message struct {
 	Role    Role
 	Content []ContentBlock
@@ -126,6 +146,20 @@ type ToolUseStop struct {
 }
 
 func (ToolUseStop) isEvent() {}
+
+// ServerToolStop fires when a provider-side server tool block finishes
+// streaming. The agent loop appends the block to the current assistant
+// message's Content as a ServerToolBlock (no dispatch). Consumers may
+// use it for UI signaling (e.g. "web_search ran").
+type ServerToolStop struct {
+	Provider  string
+	BlockType string
+	// Name is best-effort: present for server_tool_use blocks ("web_search").
+	Name string
+	Raw  json.RawMessage
+}
+
+func (ServerToolStop) isEvent() {}
 
 // MessageStop fires when the assistant has finished its response.
 type MessageStop struct {

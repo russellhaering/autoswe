@@ -85,6 +85,12 @@ func TestBuildRequestBodyGolden(t *testing.T) {
 					"required":   []any{"path"},
 				},
 			},
+			// web_search is always appended; see CLAUDE.md (no toggle).
+			map[string]any{
+				"type":     "web_search_20250305",
+				"name":     "web_search",
+				"max_uses": float64(10),
+			},
 		},
 	}
 	if !equalJSON(got, want) {
@@ -178,6 +184,104 @@ func TestParseStreamHappyPath(t *testing.T) {
 	}
 	if stop.Usage.InputTokens != 12 || stop.Usage.OutputTokens != 48 {
 		t.Fatalf("usage = %+v", stop.Usage)
+	}
+}
+
+func TestParseStreamServerTools(t *testing.T) {
+	body := strings.Join([]string{
+		`event: message_start`,
+		`data: {"type":"message_start","message":{"id":"m1","role":"assistant","content":[],"usage":{"input_tokens":5,"output_tokens":0}}}`,
+		``,
+		`event: content_block_start`,
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Let me search."}}`,
+		``,
+		`event: content_block_stop`,
+		`data: {"type":"content_block_stop","index":0}`,
+		``,
+		`event: content_block_start`,
+		`data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srv_1","name":"web_search"}}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"foo\"}"}}`,
+		``,
+		`event: content_block_stop`,
+		`data: {"type":"content_block_stop","index":1}`,
+		``,
+		`event: content_block_start`,
+		`data: {"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srv_1","content":[{"type":"web_search_result","url":"https://x","title":"X"}]}}`,
+		``,
+		`event: content_block_stop`,
+		`data: {"type":"content_block_stop","index":2}`,
+		``,
+		`event: message_delta`,
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7}}`,
+		``,
+		`event: message_stop`,
+		`data: {"type":"message_stop"}`,
+		``,
+	}, "\n")
+
+	ch := make(chan llm.Event, 32)
+	parseStream(io.NopCloser(strings.NewReader(body)), ch)
+
+	var sts []llm.ServerToolStop
+	for ev := range ch {
+		if s, ok := ev.(llm.ServerToolStop); ok {
+			sts = append(sts, s)
+		}
+	}
+	if len(sts) != 2 {
+		t.Fatalf("want 2 ServerToolStop events; got %d", len(sts))
+	}
+	if sts[0].BlockType != "server_tool_use" || sts[0].Name != "web_search" {
+		t.Errorf("stop[0] = %+v", sts[0])
+	}
+	// Verify the input was merged into the start JSON for server_tool_use.
+	var stu map[string]any
+	if err := json.Unmarshal(sts[0].Raw, &stu); err != nil {
+		t.Fatalf("server_tool_use raw not JSON: %v", err)
+	}
+	if input, ok := stu["input"].(map[string]any); !ok || input["query"] != "foo" {
+		t.Errorf("server_tool_use missing input.query=foo; got %+v", stu)
+	}
+	if sts[1].BlockType != "web_search_tool_result" {
+		t.Errorf("stop[1] = %+v", sts[1])
+	}
+}
+
+func TestBuildRequestBodyServerToolRoundTrip(t *testing.T) {
+	raw := json.RawMessage(`{"type":"server_tool_use","id":"srv_1","name":"web_search","input":{"query":"x"}}`)
+	req := llm.Request{
+		Model:     "claude-sonnet-4-5",
+		MaxTokens: 256,
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: []llm.ContentBlock{llm.TextBlock{Text: "hi"}}},
+			{Role: llm.RoleAssistant, Content: []llm.ContentBlock{
+				llm.TextBlock{Text: "let me search"},
+				llm.ServerToolBlock{Provider: ProviderID, BlockType: "server_tool_use", Raw: raw},
+			}},
+			{Role: llm.RoleUser, Content: []llm.ContentBlock{llm.TextBlock{Text: "go on"}}},
+		},
+	}
+	body, err := buildRequestBody(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	asst := got["messages"].([]any)[1].(map[string]any)
+	content := asst["content"].([]any)
+	if len(content) != 2 {
+		t.Fatalf("expected 2 content blocks; got %d", len(content))
+	}
+	b1 := content[1].(map[string]any)
+	if b1["type"] != "server_tool_use" || b1["id"] != "srv_1" {
+		t.Errorf("server_tool_use not preserved: %+v", b1)
 	}
 }
 

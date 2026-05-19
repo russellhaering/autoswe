@@ -274,7 +274,7 @@ func TestGrep(t *testing.T) {
 
 func TestDefaultRegistry(t *testing.T) {
 	r := DefaultRegistry()
-	want := []string{"bash", "edit", "glob", "grep", "read", "write"}
+	want := []string{"bash", "edit", "glob", "grep", "read", "web_fetch", "write"}
 	got := r.Names()
 	if len(got) != len(want) {
 		t.Fatalf("want %d tools, got %d (%v)", len(want), len(got), got)

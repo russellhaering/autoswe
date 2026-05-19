@@ -109,6 +109,18 @@ type ToolResult struct {
 
 func (ToolResult) isAgentEvent() {}
 
+// ServerToolUse fires when the provider runs a server-side tool (e.g.
+// Anthropic web_search) and emits a server_tool_use block. The agent
+// doesn't dispatch — the provider already ran it. Surfaced so the UI can
+// show that the model searched without surprise.
+type ServerToolUse struct {
+	Provider string
+	Name     string
+	Raw      json.RawMessage
+}
+
+func (ServerToolUse) isAgentEvent() {}
+
 // Stop fires when the agent terminates normally (any stop reason that is not
 // tool_use).
 type Stop struct {
