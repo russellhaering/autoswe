@@ -5,7 +5,8 @@ A headless coding agent: Go library and CLI, multi-provider (Anthropic, OpenAI, 
 ## Features
 
 - **Providers:** Anthropic Messages API, OpenAI Chat Completions, Amazon Bedrock Converse — same canonical message/tool shape behind `pkg/llm.Provider`.
-- **Built-in tools:** `read`, `write`, `edit`, `bash`, `glob`, `grep`, `web_fetch`, with `Effect` metadata (read-only / filesystem-write / code-execution / network) that policies use to gate execution.
+- **Built-in tools:** `read`, `write`, `patch`, `bash`, `glob`, `grep`, `web_fetch`, with `Effect` metadata (read-only / filesystem-write / code-execution / network) that policies use to gate execution.
+- **Tag-based file editing** (after [antirez](https://antirez.com/news/166)): `read` stamps each line with a 4-char content tag (`<line>:<tag>\t<text>`); `patch` references lines by `{line, tag, new}` and verifies the tag as a CAS check. No more verbatim old-text echo — significantly cheaper in tokens, especially when batching multiple edits inside one code-mode `run_script`.
 - **Web search (Anthropic only, always on):** the Anthropic provider unconditionally advertises Claude's `web_search_20250305` server tool; Claude decides when to use it and results come back inline with citations. No toggle (see `CLAUDE.md`). OpenAI's Chat Completions API doesn't surface web search as a plain tool — that's a follow-up via the Responses API. Bedrock has no native web search.
 - **Permissions:** composable policies — `AllowAll`, `DenyAll`, `AllowReadOnly`, `Allowlist`, `Chain`, `Remembered` (in-session cache), `Interactive` (TTY prompter). Decisions can `Allow`, `Deny` (reason surfaced to model), or `Modify` (rewrite args before tool runs).
 - **MCP:** stdio MCP servers via `--mcp-config`; a dynamic `tool_search` meta-tool indexes server-advertised tools and promotes matches into the registry on demand. MCP annotations (`readOnlyHint`, `destructiveHint`, `openWorldHint`) map to our `Effect` set so the same policies gate them.
@@ -109,7 +110,7 @@ pkg/llm/             Canonical types + Provider interface
   openai/            Chat Completions (HTTP+SSE)
   bedrock/           Converse (AWS SDK)
 pkg/tools/           Tool/Registry/Effect
-  builtins/          read/write/edit/bash/glob/grep
+  builtins/          read/write/patch/bash/glob/grep/web_fetch (+ tag.go shared by read+patch)
 pkg/permissions/     Policy + Allow/Deny/AllowReadOnly/Allowlist/Chain/Remembered/Interactive
 pkg/mcp/             stdio JSON-RPC client + tool_search meta-tool
 pkg/skills/          Discovery + skill meta-tool

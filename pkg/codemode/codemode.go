@@ -145,13 +145,13 @@ func (r *RunScript) renderTSSurface() string {
 
 func (r *RunScript) renderDescription() string {
 	const header = "Run a JavaScript snippet that calls registered tools as host functions, instead of emitting one tool_use per call.\n\n" +
-		"Use this when you would otherwise chain several tools — e.g. read several files, run a search and parse results, list files and stat each. For a single tool call, just emit that tool directly.\n\n" +
+		"Use this to execute JavaScript code that can call multiple tools in sequence. Note: The tools listed below are ONLY available within JavaScript - they cannot be invoked directly as separate tool calls.\n\n" +
 		"Rules:\n" +
 		"- The script supports top-level await; each bound tool returns a Promise<string>.\n" +
 		"- Use try/catch — denied or failing tool calls throw a JS Error whose message is the deny reason or tool error.\n" +
 		"- Print results with console.log; only its output flows back to the conversation. The script's final expression value is appended too if non-undefined.\n" +
 		"- No fetch, no network, no filesystem except via the bound tools. No recursion into run_script.\n\n" +
-		"Available tools (TypeScript declarations):\n\n"
+		"Available tools (JavaScript/TypeScript only - these are NOT directly invokable, use only within this script):\n\n"
 	return header + r.tsDecl
 }
 

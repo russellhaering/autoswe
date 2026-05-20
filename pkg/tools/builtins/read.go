@@ -24,7 +24,9 @@ type readTool struct{}
 func (readTool) Name() string { return "read" }
 
 func (readTool) Description() string {
-	return "Read a file from disk. Returns the file contents with 1-indexed line numbers prefixed to each line. " +
+	return "Read a file from disk. Each line is prefixed with `<line>:<tag>\\t`, where <line> is the " +
+		"1-indexed line number and <tag> is a 4-char content tag. The tag is a check-and-set token: " +
+		"pass it to `patch` to verify the line hasn't changed since you read it. " +
 		"Use offset/limit to read a window of a large file."
 }
 
@@ -77,7 +79,8 @@ func (readTool) Run(_ context.Context, raw json.RawMessage) (tools.Result, error
 		if emitted >= a.Limit {
 			break
 		}
-		fmt.Fprintf(&b, "%6d\t%s\n", lineNo, scanner.Text())
+		line := scanner.Bytes()
+		fmt.Fprintf(&b, "%d:%s\t%s\n", lineNo, lineTag(line), line)
 		emitted++
 	}
 	if err := scanner.Err(); err != nil {

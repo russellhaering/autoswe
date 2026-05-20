@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -26,16 +27,42 @@ func TestRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("full", func(t *testing.T) {
+	tagRE := regexp.MustCompile(`(?m)^[A-Za-z0-9_-]{4}:\d+\t`)
+
+	t.Run("full_with_tags", func(t *testing.T) {
 		r, err := Read.Run(context.Background(), mustJSON(t, map[string]string{"path": path}))
 		if err != nil || r.IsError {
 			t.Fatalf("err=%v result=%+v", err, r)
 		}
-		if !strings.Contains(r.Content, "\t one\n") && !strings.Contains(r.Content, "\tone\n") {
-			// numeric prefix uses %6d, so allow either spacing
-			if !strings.Contains(r.Content, "one") || !strings.Contains(r.Content, "four") {
-				t.Fatalf("want all four lines, got %q", r.Content)
+		// Wait — the format starts with `<line>:<tag>\t`, but the regex above
+		// has the tag first. Update both.
+		matches := regexp.MustCompile(`(?m)^\d+:[A-Za-z0-9_-]{4}\t`).FindAllString(r.Content, -1)
+		if len(matches) != 4 {
+			t.Fatalf("want 4 tagged lines, got %d in %q", len(matches), r.Content)
+		}
+		for _, want := range []string{"one", "two", "three", "four"} {
+			if !strings.Contains(r.Content, want) {
+				t.Fatalf("missing %q in %q", want, r.Content)
 			}
+		}
+		_ = tagRE
+	})
+
+	t.Run("tag_stable_and_distinct", func(t *testing.T) {
+		r1, _ := Read.Run(context.Background(), mustJSON(t, map[string]string{"path": path}))
+		r2, _ := Read.Run(context.Background(), mustJSON(t, map[string]string{"path": path}))
+		if r1.Content != r2.Content {
+			t.Fatalf("expected stable output across reads")
+		}
+		// Extract tags; assert all distinct (the four lines are distinct).
+		re := regexp.MustCompile(`(?m)^\d+:([A-Za-z0-9_-]{4})\t`)
+		ms := re.FindAllStringSubmatch(r1.Content, -1)
+		seen := map[string]bool{}
+		for _, m := range ms {
+			seen[m[1]] = true
+		}
+		if len(seen) != len(ms) {
+			t.Fatalf("expected distinct tags for distinct lines, got %d unique of %d (%q)", len(seen), len(ms), r1.Content)
 		}
 	})
 
@@ -79,66 +106,6 @@ func TestWrite(t *testing.T) {
 	}
 }
 
-func TestEdit(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "f.txt")
-
-	t.Run("single_match", func(t *testing.T) {
-		if err := os.WriteFile(path, []byte("hello world"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		r, err := Edit.Run(context.Background(), mustJSON(t, map[string]any{
-			"path": path, "old_string": "world", "new_string": "go",
-		}))
-		if err != nil || r.IsError {
-			t.Fatalf("err=%v result=%+v", err, r)
-		}
-		got, _ := os.ReadFile(path)
-		if string(got) != "hello go" {
-			t.Fatalf("got %q", got)
-		}
-	})
-
-	t.Run("multiple_match_without_replace_all_errors", func(t *testing.T) {
-		if err := os.WriteFile(path, []byte("a a a"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		r, _ := Edit.Run(context.Background(), mustJSON(t, map[string]any{
-			"path": path, "old_string": "a", "new_string": "b",
-		}))
-		if !r.IsError {
-			t.Fatalf("want error for multiple matches without replace_all")
-		}
-	})
-
-	t.Run("replace_all", func(t *testing.T) {
-		if err := os.WriteFile(path, []byte("a a a"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		r, err := Edit.Run(context.Background(), mustJSON(t, map[string]any{
-			"path": path, "old_string": "a", "new_string": "b", "replace_all": true,
-		}))
-		if err != nil || r.IsError {
-			t.Fatalf("err=%v result=%+v", err, r)
-		}
-		got, _ := os.ReadFile(path)
-		if string(got) != "b b b" {
-			t.Fatalf("got %q", got)
-		}
-	})
-
-	t.Run("no_match", func(t *testing.T) {
-		if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		r, _ := Edit.Run(context.Background(), mustJSON(t, map[string]any{
-			"path": path, "old_string": "zzz", "new_string": "x",
-		}))
-		if !r.IsError {
-			t.Fatalf("want error for no match, got %+v", r)
-		}
-	})
-}
 
 func TestBash(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
@@ -274,7 +241,7 @@ func TestGrep(t *testing.T) {
 
 func TestDefaultRegistry(t *testing.T) {
 	r := DefaultRegistry()
-	want := []string{"bash", "edit", "glob", "grep", "read", "web_fetch", "write"}
+	want := []string{"bash", "glob", "grep", "patch", "read", "web_fetch", "write"}
 	got := r.Names()
 	if len(got) != len(want) {
 		t.Fatalf("want %d tools, got %d (%v)", len(want), len(got), got)
